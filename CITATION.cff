@@ -1,0 +1,58 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below, and cite the clinical study it is calibrated against (see preferred-citation)."
+type: software
+title: "Kidney PBPK Model — Furosemide & Protein-Bound Uremic Toxins"
+abstract: >-
+  A physiologically based pharmacokinetic (PBPK) model of the human kidney,
+  representing competitive inhibition of OAT1/OAT3-mediated renal clearance
+  of protein-bound uremic toxins (indoxyl sulfate, hippuric acid, p-cresyl
+  sulfate) by furosemide, in healthy and CKD-5 physiology. Includes a
+  142-state distributed tubular ODE system, parameter sensitivity analyses,
+  and validation against published literature and clinical data.
+authors:
+  - given-names: Leyla
+    affiliation: "MERLN Institute / cBITE / MaCSBio, Maastricht University"
+keywords:
+  - PBPK
+  - pharmacokinetics
+  - kidney
+  - chronic kidney disease
+  - uremic toxins
+  - furosemide
+  - OAT1
+  - OAT3
+  - drug-drug interaction
+  - systems biology
+license: MIT
+preferred-citation:
+  type: article
+  title: "Furosemide and Serum Protein-Bound Uremic Toxin Concentrations in Patients With CKD"
+  authors:
+    - family-names: Costes-Albrespic
+      given-names: Margaux
+    - family-names: Alencar de Pinho
+      given-names: Natalia
+    - family-names: Larabi
+      given-names: Islam Amine
+    - family-names: El Chamieh
+      given-names: Carolla
+    - family-names: Laville
+      given-names: Solène M.
+    - family-names: Fouque
+      given-names: Denis
+    - family-names: Laville
+      given-names: Maurice
+    - family-names: Frimat
+      given-names: Luc
+    - family-names: Alvarez
+      given-names: Jean-Claude
+    - family-names: Massy
+      given-names: Ziad A.
+    - family-names: Liabeuf
+      given-names: Sophie
+  journal: "Kidney International Reports"
+  volume: "10"
+  start: "2165"
+  end: "2177"
+  year: 2025
+  doi: "10.1016/j.ekir.2025.04.040"

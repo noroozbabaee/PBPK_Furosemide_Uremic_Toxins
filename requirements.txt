@@ -1,0 +1,43 @@
+# requirements.txt
+# =================
+# Third-party dependencies for the Kidney PBPK model (furosemide / uremic
+# toxins). Everything else imported across this codebase (os, sys, csv,
+# pickle, copy, math, time, typing, warnings, inspect, importlib,
+# datetime, __future__) is Python standard library and needs no install.
+#
+# INSTALL
+# -------
+#   pip install -r requirements.txt
+#
+# TESTED WITH
+# -----------
+#   numpy       2.4.4
+#   scipy       1.17.1
+#   matplotlib  3.10.8
+#
+# NUMPY 2.x COMPATIBILITY NOTE
+# -----------------------------
+# np.trapz was deprecated in NumPy 2.0 (replaced by np.trapezoid) and
+# REMOVED ENTIRELY in later NumPy 2.x releases. Every script in this
+# package that performs AUC/trapezoidal integration already uses a
+# version-safe wrapper:
+#
+#     def _trapz(y, x):
+#         if hasattr(np, "trapezoid"):
+#             return np.trapezoid(y, x)
+#         return np.trapz(y, x)
+#
+# so this codebase works correctly on both old and new NumPy. If you
+# add new analysis scripts, use the same pattern rather than calling
+# np.trapz directly — a bare np.trapz call (or the unsafe
+# getattr(np, "trapezoid", np.trapz) pattern, which evaluates the
+# np.trapz default eagerly and crashes anyway) will raise
+# AttributeError on NumPy >= ~2.2.
+#
+# scipy.integrate.solve_ivp (the Radau-method ODE solver used in
+# src/simulation.py) requires scipy >= 1.4; any reasonably recent
+# scipy 1.x release works.
+#
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
