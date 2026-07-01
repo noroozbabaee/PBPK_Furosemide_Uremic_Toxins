@@ -1,0 +1,131 @@
+% ============================================================
+% figure_caption_oral_absorption.tex
+% ============================================================
+% Publication-quality LaTeX caption for the 4-panel oral
+% absorption figure (plot_oral_absorption_model.py).
+%
+% USAGE IN YOUR MANUSCRIPT
+% ─────────────────────────
+% 1. Copy the \begin{figure}...\end{figure} block into your
+%    manuscript at the correct position.
+% 2. Add the three BibTeX entries at the bottom of this file
+%    to your .bib file.
+% 3. Adjust the \includegraphics path to match your figure
+%    filename/location.
+% 4. Compile with:
+%       pdflatex manuscript
+%       bibtex   manuscript
+%       pdflatex manuscript  (×2)
+%
+% NOTES ON MATH INSIDE \caption{}
+% ─────────────────────────────────
+% LaTeX does not support \begin{equation*} inside \caption{}.
+% All equations here are written as inline math ($...$) which
+% compiles cleanly and is standard practice for figure captions.
+% ============================================================
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figures/oral_absorption_model_TID}
+    \caption{%
+        \textbf{Oral absorption model for furosemide:
+        piecewise-constant input rate approximation and
+        sensitivity analysis.}
+        %
+        \textbf{(A)} Amount of drug remaining in the gut compartment
+        as a function of time after a single oral dose, described by
+        the first-order absorption equation
+        $A_{\mathrm{gut}}(t) = F \cdot D \cdot e^{-k_a t}$,
+        where $F = 0.60$ (oral bioavailability \cite{FDA_furosemide_label}),
+        $D = 240$\,mg (total daily dose, TID regimen: $3 \times 80$\,mg),
+        and $k_a = 1.5$\,h$^{-1}$ \cite{Hammarlund1984}.
+        The shaded area denotes the total absorbed amount over the
+        6-hour dosing window; the highlighted segment illustrates a
+        single piecewise interval $j$ with absorbed amount
+        $A_{\mathrm{abs},j}$.
+        %
+        \textbf{(B)} Absorption rate as a function of time.
+        The continuous curve represents the analytical rate
+        $\dot{A}_{\mathrm{abs}}(t) = k_a \cdot A_{\mathrm{gut}}(t)$;
+        bars represent the piecewise-constant infusion rate
+        approximation $IR_j = A_{\mathrm{abs},j}/\Delta t_j$
+        across $N = 20$ equal time segments, used as the drug input
+        to the ODE system.
+        Total absorbed dose: $\sum A_{\mathrm{abs}} = 143.98$\,mg
+        (0.012\% error relative to $F \cdot D$).
+        %
+        \textbf{(C)} Summary of the governing equations.
+        The gut compartment obeys
+        $dA_{\mathrm{gut}}/dt = -k_a A_{\mathrm{gut}}$,
+        with analytical solution
+        $A_{\mathrm{gut}}(t) = F \cdot D \cdot e^{-k_a t}$.
+        The absorbed amount in segment $j$ is
+        $A_{\mathrm{abs},j} = F \cdot D
+        \left[e^{-k_a t_j} - e^{-k_a t_{j+1}}\right]$,
+        and the corresponding constant infusion rate delivered to the
+        central compartment is $IR_j = A_{\mathrm{abs},j}/\Delta t_j$.
+        %
+        \textbf{(D)} Sensitivity of the gut absorption profile to the
+        absorption rate constant $k_a$.
+        Three values are shown: $k_a = 1.0$, $1.5$ (central
+        estimate \cite{Hammarlund1984}), and $2.0$\,h$^{-1}$.
+        Vertical dashed lines indicate the time of peak plasma
+        concentration ($T_{\max}$), determined numerically from the
+        two-compartment oral model by solving $dC_{\mathrm{cen}}/dt = 0$,
+        using the macro rate constants $\alpha = 0.631$\,h$^{-1}$ and
+        $\beta = 0.374$\,h$^{-1}$ derived from the CKD-5 model parameters
+        ($k_{10} = CL_{\mathrm{furo}}/V_{\mathrm{cen}} = 0.472$\,h$^{-1}$,
+        $k_{12} = 0.033$\,h$^{-1}$, $k_{21} = 0.50$\,h$^{-1}$,
+        $CL_{\mathrm{furo}} = 2.36$\,L\,h$^{-1}$, $V_{\mathrm{cen}} = 5.0$\,L).
+        Predicted $T_{\max}$ values of 84, 66, and 56\,min for
+        $k_a = 1.0$, $1.5$, and $2.0$\,h$^{-1}$, respectively, are
+        consistent with the reported oral furosemide tablet
+        $T_{\max}$ of approximately 87\,min in healthy fasted
+        subjects \cite{FDA_furosemide_label}.
+    }
+    \label{fig:oral_absorption_model}
+\end{figure}
+
+% ============================================================
+% BibTeX entries — add these to your .bib file
+% ============================================================
+
+% FDA label — primary source for F=0.60 and Tmax~87 min
+@manual{FDA_furosemide_label,
+  title        = {{LASIX\textsuperscript{\textregistered}
+                   (furosemide) Tablets 20, 40, and 80\,mg:
+                   Prescribing Information}},
+  organization = {{U.S. Food and Drug Administration}},
+  note         = {NDA 016273, Revised 2012.
+                  Available: \url{https://www.accessdata.fda.gov/
+                  drugsatfda_docs/label/2012/016273s066lbl.pdf}},
+  year         = {2012},
+}
+
+% Hammarlund 1984 — source for ka and absorption-rate-limited kinetics
+@article{Hammarlund1984,
+  author  = {Hammarlund, Margareta M. and
+             Paalzow, Lennart K. and
+             Odlind, Birger},
+  title   = {Pharmacokinetics of furosemide in man after intravenous
+             and oral administration. {Application} of moment analysis},
+  journal = {European Journal of Clinical Pharmacology},
+  year    = {1984},
+  volume  = {26},
+  number  = {2},
+  pages   = {197--207},
+  doi     = {10.1007/BF00630286},
+  pmid    = {6723758},
+}
+
+% Rowland & Tozer — textbook source for first-order absorption equation form
+@book{Rowland2011,
+  author    = {Rowland, Malcolm and Tozer, Thomas N.},
+  title     = {Clinical Pharmacokinetics and Pharmacodynamics:
+               Concepts and Applications},
+  edition   = {4th},
+  publisher = {Lippincott Williams \& Wilkins},
+  address   = {Philadelphia},
+  year      = {2011},
+  note      = {Chapter~4: Multiple-Dose Regimens},
+}
