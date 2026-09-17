@@ -99,6 +99,7 @@ from constants import (
     CKD5_RBF_SCALE,   # single definition lives in constants.py
     ML_MIN_TO_L_H,
 )
+import constants as _K
 
 
 # -------------------------------------------------------------------------
@@ -271,9 +272,10 @@ def make_phys(
     Q_urine   = urine_ml_min * ML_MIN_TO_L_H
 
     # DEBUG PRINT (can be removed or commented out)
-    print(f"Q_kidney0 = {Q_kidney0:.4f} L/h")
-    print(f"Q_GFR = {Q_GFR:.4f} L/h")
-    print(f"Q_urine = {Q_urine:.4f} L/h")
+    if _K.VERBOSE:
+        print(f"Q_kidney0 = {Q_kidney0:.4f} L/h")
+        print(f"Q_GFR = {Q_GFR:.4f} L/h")
+        print(f"Q_urine = {Q_urine:.4f} L/h")
 
     # Step 4: Validate tubular flow consistency.
     #
@@ -295,11 +297,11 @@ def make_phys(
     else:
         if abs(tubular_flows["P1"] / max(gfr_ml_min, 1e-12) - 1.0) > 0.1:
             print(f"[WARN] CKD P1 flow ({tubular_flows['P1']:.2f}) != GFR ({gfr_ml_min:.2f})")
-        else:
+        elif _K.VERBOSE:
             print("Flow validation passed!")
 
     # Optional diagnostic print for CKD mode.
-    if mode == "ckd5":
+    if mode == "ckd5" and _K.VERBOSE:
         print(
             "[INFO] CKD5 physiology: "
             f"GFR_scale={effective_gfr_scale:.3f}, "

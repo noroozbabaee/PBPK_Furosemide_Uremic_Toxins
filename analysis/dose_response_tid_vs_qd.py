@@ -210,6 +210,8 @@ def _build_fingerprint(live_pk: dict) -> dict:
         BP_IS=BP_IS,
         BP_pCS=BP_pCS,
         MODE_CODE=5.0 if MODE == "ckd5" else 0.0,
+        # 1 = residual furosemide is carried across days (not zeroed at 24 h)
+        CHRONIC_CARRYOVER=1.0,
         # Live PK — if model changes, these will differ and force re-run
         CL_FURO=live_pk["CL_FURO"],
         CL_R_IS=live_pk["CL_R_IS"],
@@ -457,13 +459,18 @@ def build_oral_profile(dose_mg: float) -> list:
 # STEP 4 — ONE 24h CYCLE WITH TID DOSING
 # ═════════════════════════════════════════════════════════════════════════════
 def run_one_day_tid(ic: dict, day_offset_h: float,
-                    oral_segs: list) -> tuple:
+                    oral_segs: list, dose_times_h=None) -> tuple:
     """
-    Run one 24h day with TID dosing (3 doses at 0h, 8h, 16h).
+    Run one 24h day at the given clock times (TID 0/8/16 h or QD 0 h).
 
     Each dose uses the same oral absorption profile (oral_segs) shifted
     to its dose time. Between doses, the ODE runs with no drug input but
     competitive inhibition still active if furosemide is present.
+
+    Residual furosemide (C_ven, C_peri) is carried in `ic` from the previous
+    day. Do not zero those compartments here — that turned a QD run into a
+    fresh single dose every morning, and a TID run into three isolated doses
+    with no overnight leftover.
 
     Returns (t_array, y_array, ic_end_of_day)
     """
@@ -471,17 +478,13 @@ def run_one_day_tid(ic: dict, day_offset_h: float,
     t_all_day = []
     y_all_day = []
     ic_cur = copy.deepcopy(ic)
-
-    # Zero drug compartments at start of each day
-    # (toxin concentrations are carried over from previous day)
-    for key in ("C_ven", "C_peri", "Ae_drg", "C_bladder"):
-        if key in ic_cur:
-            ic_cur[key] = 0.0
+    if dose_times_h is None:
+        dose_times_h = DOSE_TIMES_H
 
     # Process each dose within the 24h day
-    for dose_idx, dose_time_h in enumerate(DOSE_TIMES_H):
+    for dose_idx, dose_time_h in enumerate(dose_times_h):
         # Determine end time for this dose's window
-        next_dose_h = DOSE_TIMES_H[dose_idx + 1] if dose_idx + 1 < len(DOSE_TIMES_H) \
+        next_dose_h = dose_times_h[dose_idx + 1] if dose_idx + 1 < len(dose_times_h) \
             else TAU_H
 
         # ── Phase A: absorption window for this dose ──────────────────────
@@ -1041,7 +1044,8 @@ def _run_simulation(ic_ss, live_pk,
             print(f"    Day {day + 1:3d}: "
                   f"IS={ic_cur.get('C_tox1_cen', 0):.3f}  "
                   f"pCS={ic_cur.get('C_tox3_cen', 0):.3f} mg/L")
-        t_d, y_d, ic_cur = run_one_day_tid(ic_cur, t_off, oral_segs)
+        t_d, y_d, ic_cur = run_one_day_tid(
+            ic_cur, t_off, oral_segs, dose_times_h=dose_times_h)
         all_t.append(t_d)
         if "C_tox1_cen" in IDX:
             all_IS.append(y_d[IDX["C_tox1_cen"], :])
