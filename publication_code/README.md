@@ -46,6 +46,16 @@ QD = 240 mg × 1 (240 mg/day). TID = 240 mg × 3 (720 mg/day). CKD-5, 30 days, K
 PYTHONUTF8=1 python3 analysis/run_240mg_qd_and_tid.py
 ```
 
+## PowerPoint — furosemide final 24 h cycle (panel E)
+
+Standalone greyscale slide of the five-panel **E** plot (TID 120 / QD 240 / TID 240).
+
+```bash
+PYTHONUTF8=1 python3 figures/make_ppt_furosemide_24h.py
+```
+
+Insert `publication_code/Figures/chronic_oral_furosemide_24h_cycle_ppt_legend.png` into PowerPoint (400 dpi). PDF/SVG are in the same folder.
+
 
 ## Figure 4 — PBUT flux decomposition
 
