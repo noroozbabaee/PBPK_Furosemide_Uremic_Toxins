@@ -212,6 +212,7 @@ def _build_fingerprint(live_pk: dict) -> dict:
         MODE_CODE=5.0 if MODE == "ckd5" else 0.0,
         # 1 = residual furosemide is carried across days (not zeroed at 24 h)
         CHRONIC_CARRYOVER=1.0,
+        HA_TRACKED=1.0,
         # Live PK — if model changes, these will differ and force re-run
         CL_FURO=live_pk["CL_FURO"],
         CL_R_IS=live_pk["CL_R_IS"],
@@ -234,12 +235,14 @@ def _cache_is_valid(cache_path: str, live_pk: dict) -> bool:
     fp = _build_fingerprint(live_pk)
     mismatches = []
     for key, current_val in fp.items():
-        if key not in cache.files:
-            mismatches.append((key, "MISSING", current_val))
+        if "HA_all" not in cache.files:
+            mismatches.append(("HA_all", "MISSING", "required"))
             continue
         cached_val = float(cache[key].flat[0])
         if abs(cached_val - current_val) > 1e-9:
             mismatches.append((key, cached_val, current_val))
+    if "HA_all" not in cache.files:
+        mismatches.append(("HA_all", "MISSING", "required"))
 
     if mismatches:
         print(f"\n  [CACHE] Parameter mismatch — forcing re-run:")
@@ -480,6 +483,30 @@ def run_one_day_tid(ic: dict, day_offset_h: float,
     ic_cur = copy.deepcopy(ic)
     if dose_times_h is None:
         dose_times_h = DOSE_TIMES_H
+
+    if len(dose_times_h) == 0:
+        C.initialize_compounds(MODE)
+        _restore_ki()
+        dp, *_ = CP.get_compound_parameters(MODE)
+        for k, v in dp.items():
+            C.drug[k] = v
+        C.drug.update({
+            "enabled": True,
+            "IR": 0.0,
+            "t_inf_h": 0.0,
+            "t_start_h": 1e9,
+            "bolus_mg": 0.0,
+            "inhibit": False,
+        })
+        for attr in ("tox1", "tox2", "tox3"):
+            tox = getattr(C, attr, None)
+            if isinstance(tox, dict):
+                tox["enabled"] = True
+        sol = run_sim(t_end_h=TAU_H, mode=MODE, dt=DT_BETWEEN,
+                      custom_initial_conds=copy.deepcopy(ic_cur))
+        t_day = sol.t + day_offset_h
+        ic_end = {name: float(sol.y[i, -1]) for name, i in IDX.items()}
+        return t_day, sol.y, ic_end
 
     # Process each dose within the 24h day
     for dose_idx, dose_time_h in enumerate(dose_times_h):
@@ -1027,12 +1054,14 @@ def _run_simulation(ic_ss, live_pk,
                     oral_segs=None) -> tuple:
     """
     Run the N_DAYS TID/QD simulation for a given dosing configuration.
-    Returns (t_all, IS_all, pCS_all, drg_all).
+    Returns (t_all, IS_all, HA_all, pCS_all, drg_all).
     """
-    if oral_segs is None:
+    if oral_segs is None and n_doses > 0:
         oral_segs = build_oral_profile(dose_per_admin)
+    elif oral_segs is None:
+        oral_segs = []
 
-    all_t, all_IS, all_pCS, all_drg = [], [], [], []
+    all_t, all_IS, all_HA, all_pCS, all_drg = [], [], [], [], []
     ic_cur = copy.deepcopy(ic_ss)
     for key in ("C_ven", "C_peri", "Ae_drg", "C_bladder"):
         if key in ic_cur:
@@ -1049,6 +1078,8 @@ def _run_simulation(ic_ss, live_pk,
         all_t.append(t_d)
         if "C_tox1_cen" in IDX:
             all_IS.append(y_d[IDX["C_tox1_cen"], :])
+        if "C_tox2_cen" in IDX:
+            all_HA.append(y_d[IDX["C_tox2_cen"], :])
         if "C_tox3_cen" in IDX:
             all_pCS.append(y_d[IDX["C_tox3_cen"], :])
         if "C_ven" in IDX:
@@ -1056,6 +1087,7 @@ def _run_simulation(ic_ss, live_pk,
 
     return (np.concatenate(all_t),
             np.concatenate(all_IS),
+            np.concatenate(all_HA),
             np.concatenate(all_pCS),
             np.concatenate(all_drg))
 
@@ -1144,6 +1176,7 @@ def main():
         cache = np.load(cache_file_A, allow_pickle=False)
         t_all_A   = cache["t_all"]
         IS_all_A  = cache["IS_all"]
+        HA_all_A  = cache["HA_all"] if "HA_all" in cache.files else None
         pCS_all_A = cache["pCS_all"]
         drg_all_A = cache["drg_all"]
         print(f"  Loaded {len(t_all_A)} time points — skipping ODE run")
@@ -1153,7 +1186,7 @@ def main():
         print(f"  Running {N_DAYS} days × {N_DOSES_PER_DAY} doses/day "
               f"= {N_DAYS * N_DOSES_PER_DAY} total doses...")
         t0 = _time.perf_counter()
-        t_all_A, IS_all_A, pCS_all_A, drg_all_A = _run_simulation(
+        t_all_A, IS_all_A, HA_all_A, pCS_all_A, drg_all_A = _run_simulation(
             ic_ss, live_pk, DOSE_PER_ADMIN, N_DOSES_PER_DAY,
             DOSE_TIMES_H, oral_segs_A)
         elapsed_A = _time.perf_counter() - t0
@@ -1161,7 +1194,7 @@ def main():
               f"({elapsed_A/60:.1f} min)")
         # Save cache
         fp = _build_fingerprint(live_pk)
-        save_dict = {"t_all": t_all_A, "IS_all": IS_all_A,
+        save_dict = {"t_all": t_all_A, "IS_all": IS_all_A, "HA_all": HA_all_A,
                      "pCS_all": pCS_all_A, "drg_all": drg_all_A,
                      "IS_base": np.array([IS_base]),
                      "pCS_base": np.array([pCS_base])}
@@ -1276,7 +1309,7 @@ def main():
         print(f"  Running {N_DAYS} days × {QD_N_DOSES} dose/day "
               f"= {N_DAYS * QD_N_DOSES} total doses...")
         t0 = _time.perf_counter()
-        t_all_B, IS_all_B, pCS_all_B, drg_all_B = _run_simulation(
+        t_all_B, IS_all_B, HA_all_B, pCS_all_B, drg_all_B = _run_simulation(
             ic_ss, live_pk, QD_DOSE, QD_N_DOSES, QD_TIMES_H, oral_segs_B)
         elapsed_B = _time.perf_counter() - t0
         print(f"  ODE run complete in {elapsed_B:.1f} s "
@@ -1289,7 +1322,7 @@ def main():
         _g["DOSE_PER_ADMIN"]  = _orig_dose
         _g["N_DOSES_PER_DAY"] = _orig_n
         _g["DOSE_INTERVAL_H"] = TAU_H / _orig_n
-        save_dict_B = {"t_all": t_all_B, "IS_all": IS_all_B,
+        save_dict_B = {"t_all": t_all_B, "IS_all": IS_all_B, "HA_all": HA_all_B,
                        "pCS_all": pCS_all_B, "drg_all": drg_all_B,
                        "IS_base": np.array([IS_base]),
                        "pCS_base": np.array([pCS_base])}
