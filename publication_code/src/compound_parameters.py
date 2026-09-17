@@ -190,7 +190,7 @@ def _create_tox1_base():
         "name": "indoxyl_sulfate",
         "type": "acid",
         "MW":   MW_IS,              # 213.17 g/mol
-        "pKa":  2.0,
+        "pKa":  -1.8,               # sulfate conjugate; strongly acidic
         "P_app": 5e-7,
 
         # ── Protein binding ─────────────────────────────────────────────────
@@ -744,6 +744,8 @@ def _self_check():
         ("pCS Ki_furo",        pCS["Ki_furo_to_pCS_mgL"],     0.35),
         ("IS  Km_OAT1",        IS["Km_baso_uptake"],          3.84),
         ("pCS pKa",            pCS["pKa"],                   -2.0),
+        ("IS  pKa",            IS["pKa"],                    -1.8),
+        ("HA  pKa",            HA["pKa"],                     3.59),
         ("IS  R0",             IS["R0"],                      5.5),
         ("HA  R0",             HA["R0"],                     70.0),
         ("pCS R0",             pCS["R0"],                     2.1),
