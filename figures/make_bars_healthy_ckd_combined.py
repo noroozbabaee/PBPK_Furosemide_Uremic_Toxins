@@ -52,6 +52,8 @@ from plot_ckd_lit_comparison_3scenarios import (  # noqa: E402
     _clearance_auc_window,
 )
 from state_vector import IDX  # noqa: E402
+import constants as K  # noqa: E402
+K.VERBOSE = False
 
 
 def build_combined_bars_figure(solutions_healthy, solutions_ckd, window_h, window_c) -> plt.Figure:
