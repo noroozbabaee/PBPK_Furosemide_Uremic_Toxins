@@ -352,18 +352,26 @@ def compute_flux_contributions_percent(flux: Dict, species=("IS", "HA", "pCS", "
 # ---------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------
-def plot_flux_panels(flux_by_scenario, *, species, title, outpath=None):
+def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
     import matplotlib.pyplot as plt
     if hasattr(plotting, "setup_professional_style"):
         try: plotting.setup_professional_style()
         except Exception: pass
 
+    plt.rcParams.update({
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": False,
+        "axes.titlesize": 16,
+    })
+
     scenarios = list(flux_by_scenario.keys())
+    # Process names live in the LaTeX caption; panels are lettered only.
     panels = [
-        ("filtration",          "A) Filtration"),
-        ("basolateral_passive", "B) Basolateral passive diffusion"),
-        ("basolateral_uptake",  "C) Basolateral active uptake (OAT1)"),
-        ("apical_secretion",    "D) Apical secretion"),
+        ("filtration",          "A"),
+        ("basolateral_passive", "B"),
+        ("basolateral_uptake",  "C"),
+        ("apical_secretion",    "D"),
     ]
     fig, axes = plt.subplots(2, 2, figsize=(12, 7.6))
     axes = axes.ravel()
@@ -373,19 +381,23 @@ def plot_flux_panels(flux_by_scenario, *, species, title, outpath=None):
     left0 = x - (len(scenarios) - 1) * width / 2.0
     handles_for_legend = None
 
-    for ax, (key, ptitle) in zip(axes, panels):
-        ax.set_title(ptitle)
+    for ax, (key, letter) in zip(axes, panels):
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
         ax.set_xticks(x)
         ax.set_xticklabels(xtick_labels)
-        ax.set_xlabel("PBUTs" if "DRUG" not in species else "")
-        ax.grid(axis="y", alpha=0.25)
+        ax.set_xlabel("")
         if key == "basolateral_passive":
             ax.axhline(0.0, color="black", linewidth=0.8, alpha=0.7)
             ax.set_yscale("symlog", linthresh=1e-4)
             ax.set_ylabel("Flux (mg/h)\n(symmetric log scale)")
         else:
             ax.set_ylabel("Flux (mg/h)")
-            ax.ticklabel_format(axis="y", style="sci", scilimits=(-3, 3))
+        ax.text(
+            0.02, 0.95, letter,
+            transform=ax.transAxes,
+            fontsize=16, fontweight="bold", va="top", ha="left",
+        )
         handles = []
         for j, sc in enumerate(scenarios):
             vals  = [float(flux_by_scenario[sc][key].get(sp, 0.0)) for sp in species]
@@ -399,14 +411,13 @@ def plot_flux_panels(flux_by_scenario, *, species, title, outpath=None):
         if handles_for_legend is None:
             handles_for_legend = handles
 
-    fig.suptitle(title, fontsize=12)
     if handles_for_legend is not None:
         fig.legend(handles_for_legend, scenarios,
                    loc="lower center", ncol=min(4, len(scenarios)),
-                   frameon=False, fontsize=17,
+                   frameon=False, fontsize=12,
                    bbox_to_anchor=(0.5, -0.02),
                    columnspacing=2.2, handlelength=2.6)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+    fig.tight_layout(rect=[0, 0.08, 1, 1])
     if outpath:
         fig.savefig(outpath, dpi=300, bbox_inches="tight")
     return fig
