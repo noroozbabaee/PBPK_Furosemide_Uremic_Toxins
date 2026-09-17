@@ -21,6 +21,19 @@ Healthy and CKD-5 bar/time-course drivers used by that combiner:
 - `analysis/plot_healthy_lit_comparison_3scenarios.py`
 - `analysis/plot_ckd_lit_comparison_3scenarios.py`
 
+## Chronic oral five-panel (IS / pCS / HA / furosemide)
+
+| Paper-style file | Script |
+|---|---|
+| `Figures/chronic_oral_five_panel.pdf` | `figures/make_chronic_oral_five_panel.py` |
+
+TID 120, QD 240, TID 240, no-drug CKD-5. Requires 30-day ODE arms (HA is stored in the caches).
+
+```bash
+PYTHONUTF8=1 python3 figures/make_chronic_oral_five_panel.py
+```
+
+
 ## Figure 4 — PBUT flux decomposition
 
 | Paper file | Script |
