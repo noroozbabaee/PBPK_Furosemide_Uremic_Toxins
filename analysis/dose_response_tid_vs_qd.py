@@ -845,8 +845,9 @@ def plot_results(t_all, IS_all, pCS_all, drg_all,
                   f"dose\n{dt_h:.0f}h", fontsize=6.5, color="#BA7517", va="top")
     ax_C.set_xlabel("Time after day start (h)")
     ax_C.set_ylabel("Furosemide plasma (mg/L)")
+    times_lab = "/".join(f"{h:.0f}h" for h in DOSE_TIMES_H) or "none"
     ax_C.set_title(f"C   Furosemide — last 24h cycle ({DOSING_REGIMEN}: "
-                   f"3×{DOSE_PER_ADMIN:.0f}mg at 0/8/16h)",
+                   f"{N_DOSES_PER_DAY}×{DOSE_PER_ADMIN:.0f}mg at {times_lab})",
                    fontweight="bold", loc="left", fontsize=8)
     ax_C.legend(fontsize=7.5, frameon=False)
     ax_C.set_xlim(0, TAU_H)

@@ -6,10 +6,15 @@ Outputs in results/:
   chronic_oral_cache_Ki0p35_dose40mg_x3pd_30days_ckd5_YYYYMMDD.npz
   chronic_oral_cache_Ki0p35_dose80mg_x3pd_30days_ckd5_YYYYMMDD.npz
   chronic_oral_cache_Ki0p35_dose240mg_x1pd_30days_ckd5_YYYYMMDD.npz
+  chronic_oral_cache_Ki0p35_dose240mg_x3pd_30days_ckd5_YYYYMMDD.npz
 plus the matching chronic_oral_*.png/.pdf from the driver.
 
+240 mg per administration:
+  QD  = 240 mg × 1 (run with TID 80×3, SKIP_QD=False, or run_240mg_qd_and_tid.py)
+  TID = 240 mg × 3 (SKIP_QD so the paired once-daily arm is not 720 mg)
+
 Run order: 80 mg TID first so the paired QD is 240 mg once daily;
-then 40 mg TID with SKIP_QD so we do not also spend a 30-day run on 120 mg QD.
+then 40 mg TID with SKIP_QD; then 240 mg TID with SKIP_QD.
 """
 from __future__ import annotations
 
@@ -39,8 +44,9 @@ def main() -> None:
     print(f"RUN_DATE={gen.RUN_DATE}  Ki={gen.Ki}  OUTPUT={gen.OUTPUT_DIR}", flush=True)
 
     jobs = (
-        (80.0, False),  # TID 80×3 + QD 240×1
-        (40.0, True),   # TID 40×3 only
+        (80.0, False),   # TID 80×3 + QD 240×1
+        (40.0, True),    # TID 40×3 only
+        (240.0, True),   # TID 240×3 only (not 720 mg QD)
     )
     for dose, skip_qd in jobs:
         print(

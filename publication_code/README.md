@@ -33,6 +33,19 @@ TID 120, QD 240, TID 240, no-drug CKD-5. Requires 30-day ODE arms (HA is stored 
 PYTHONUTF8=1 python3 figures/make_chronic_oral_five_panel.py
 ```
 
+## 240 mg per dose — once daily vs three times daily
+
+| Outputs | Script |
+|---|---|
+| `chronic_oral_Ki0p35_dose240mg_x1pd_30days_ckd5_<date>.pdf` | `analysis/run_240mg_qd_and_tid.py` |
+| `chronic_oral_Ki0p35_dose240mg_x3pd_30days_ckd5_<date>.pdf` | same |
+
+QD = 240 mg × 1 (240 mg/day). TID = 240 mg × 3 (720 mg/day). CKD-5, 30 days, Ki = 0.35.
+
+```bash
+PYTHONUTF8=1 python3 analysis/run_240mg_qd_and_tid.py
+```
+
 
 ## Figure 4 — PBUT flux decomposition
 
