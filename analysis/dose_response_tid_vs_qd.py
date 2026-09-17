@@ -96,6 +96,8 @@ import constants as K
 # it is launched from.
 OUTPUT_DIR = os.path.join(_THIS_DIR, "..", "results")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+from datetime import date as _date
+RUN_DATE = _date.today().strftime("%Y%m%d")
 K.VERBOSE = False
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -104,6 +106,8 @@ K.VERBOSE = False
 # Targets the >120 mg/day category in CKD-REIN cohort.
 # Costes-Albrespic M et al. Kidney Int Rep 2025;10:2165.
 DOSING_REGIMEN = "TID"  # "TID" = 3×/day  |  "QD" = once-daily
+# When True, skip the paired once-daily run at the same daily total.
+SKIP_QD = False
 DOSE_PER_ADMIN = 80.0  # mg per administration
 N_DOSES_PER_DAY = 3  # 3 doses per day
 DOSE_INTERVAL_H = 8.0  # h between doses (24h / 3 = 8h)
@@ -176,7 +180,7 @@ def _cache_path() -> str:
     return os.path.join(
         OUTPUT_DIR,
         f"chronic_oral_cache_"
-        f"Ki{ki_str}_dose{dose_str}mg_x{N_DOSES_PER_DAY}pd_{N_DAYS}days.npz"
+        f"Ki{ki_str}_dose{dose_str}mg_x{N_DOSES_PER_DAY}pd_{N_DAYS}days_{MODE}_{RUN_DATE}.npz"
     )
 
 
@@ -906,7 +910,7 @@ def plot_results(t_all, IS_all, pCS_all, drg_all,
     fig_stem = os.path.join(
         OUTPUT_DIR,
         f"chronic_oral_"
-        f"Ki{ki_str}_dose{dose_str}mg_x{N_DOSES_PER_DAY}pd_{N_DAYS}days"
+        f"Ki{ki_str}_dose{dose_str}mg_x{N_DOSES_PER_DAY}pd_{N_DAYS}days_{MODE}_{RUN_DATE}"
     )
     for ext in ("png", "pdf"):
         p = f"{fig_stem}.{ext}"
@@ -924,7 +928,7 @@ def _run_tag(dose_per_admin: float, n_doses: int, ki: float, n_days: int) -> str
     """Unique string tag for a given run configuration — used in filenames."""
     ki_str   = f"{ki:.4g}".replace(".", "p")
     dose_str = f"{dose_per_admin:.4g}"
-    return f"Ki{ki_str}_dose{dose_str}mg_x{n_doses}pd_{n_days}days"
+    return f"Ki{ki_str}_dose{dose_str}mg_x{n_doses}pd_{n_days}days_{MODE}_{RUN_DATE}"
 
 
 def _save_results_npz(tag: str,
@@ -1196,6 +1200,15 @@ def main():
     # ══════════════════════════════════════════════════════════════════════════
     # RUN B — same total daily dose as QD (once daily)
     # ══════════════════════════════════════════════════════════════════════════
+    if SKIP_QD:
+        print("\n[RUN B] Skipped (SKIP_QD=True).")
+        total_elapsed = _time.perf_counter() - t_main_start
+        print(f"\n  Total wall-clock time: {total_elapsed:.1f} s "
+              f"({total_elapsed/60:.1f} min)")
+        print(f"    Cache A  : {os.path.join(OUTPUT_DIR, f'chronic_oral_cache_{tag_A}.npz')}")
+        print(f"    Figure A : {os.path.join(OUTPUT_DIR, f'chronic_oral_{tag_A}.png/.pdf')}")
+        return
+
     QD_DOSE       = DOSE_TOTAL_PER_DAY   # same total as Run A (e.g. 240 mg)
     QD_N_DOSES    = 1
     QD_TIMES_H    = [0.0]
@@ -1210,7 +1223,7 @@ def main():
     cache_file_B = os.path.join(
         OUTPUT_DIR,
         f"chronic_oral_cache_"
-        f"Ki{ki_str_b}_dose{QD_DOSE:.4g}mg_x{QD_N_DOSES}pd_{N_DAYS}days.npz"
+        f"Ki{ki_str_b}_dose{QD_DOSE:.4g}mg_x{QD_N_DOSES}pd_{N_DAYS}days_{MODE}_{RUN_DATE}.npz"
     )
 
     # Build a temporary fingerprint for QD to check cache validity
@@ -1222,6 +1235,7 @@ def main():
     _g = globals()
     _g["DOSE_PER_ADMIN"]  = QD_DOSE
     _g["N_DOSES_PER_DAY"] = QD_N_DOSES
+    _g["DOSE_TIMES_H"]    = QD_TIMES_H
     _g["DOSE_INTERVAL_H"] = TAU_H
     fp_B = _build_fingerprint(live_pk)
     cache_ok_B = False
@@ -1242,6 +1256,7 @@ def main():
     # Restore globals
     _g["DOSE_PER_ADMIN"]  = _orig_dose
     _g["N_DOSES_PER_DAY"] = _orig_n
+    _g["DOSE_TIMES_H"]    = [0.0, 8.0, 16.0] if _orig_n == 3 else [0.0]
     _g["DOSE_INTERVAL_H"] = TAU_H / _orig_n
 
     if cache_ok_B:
