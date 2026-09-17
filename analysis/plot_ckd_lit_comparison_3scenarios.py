@@ -283,6 +283,18 @@ def _clearance_auc_window(
     return dAe / auc   # [L/h]
 
 
+def _legend_label(name: str) -> str:
+    """Drop Healthy/CKD from legend text; row placement already shows condition."""
+    s = str(name).strip()
+    for prefix in ("Healthy ", "CKD-5 ", "CKD "):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+            break
+    if s.lower().startswith("literature"):
+        return "Literature"
+    return s
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 1.  Compound and state index maps
 # ══════════════════════════════════════════════════════════════════════════════
@@ -440,6 +452,11 @@ def create_figure_bars_generic(
     legend_bbox:     Tuple[float, float] = (0.5, -0.07),
     legend_ncol:     int = 4,
     legend_fontsize: int = 15,
+    fig=None,
+    axes=None,
+    show_legend: bool = True,
+    panel_letters: Tuple[str, str] = ("C", "D"),
+    apply_tight_layout: bool = True,
 ) -> plt.Figure:
     """
     Build the 1×2 bar figure (fig_bars).
@@ -478,7 +495,12 @@ def create_figure_bars_generic(
             f"got {len(scenario_names)}"
         )
 
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5), sharey=False)
+    if axes is None:
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5), sharey=False)
+    else:
+        axL, axR = axes
+        if fig is None:
+            fig = axL.figure
 
     n_tox = len(toxins)
     x     = np.arange(n_tox)
@@ -503,11 +525,11 @@ def create_figure_bars_generic(
             else:
                 finals[name].append(np.nan)
 
-    axL.bar(x_s0, finals[sc0], width, label=sc0,
+    axL.bar(x_s0, finals[sc0], width, label=_legend_label(sc0),
             color=colors[sc0], alpha=0.85, edgecolor="black", linewidth=0.5)
-    axL.bar(x_s1, finals[sc1], width, label=sc1,
+    axL.bar(x_s1, finals[sc1], width, label=_legend_label(sc1),
             color=colors[sc1], alpha=0.85, edgecolor="black", linewidth=0.5)
-    axL.bar(x_s2, finals[sc2], width, label=sc2,
+    axL.bar(x_s2, finals[sc2], width, label=_legend_label(sc2),
             color=colors[sc2], alpha=0.85, edgecolor="black", linewidth=0.5)
 
     # Literature error bars (plotted at x_s0 position)
@@ -520,7 +542,7 @@ def create_figure_bars_generic(
         yerr=[lit_lo, lit_hi],
         fmt="D", color="black", markerfacecolor="black",
         markersize=6, capsize=5, capthick=2, elinewidth=2,
-        label="Literature CKD",
+        label="Literature",
         zorder=5,
     )
 
@@ -532,7 +554,7 @@ def create_figure_bars_generic(
     axL.grid(True, alpha=0.25, axis="y")
     axL.spines["top"].set_visible(False)
     axL.spines["right"].set_visible(False)
-    axL.text(0.02, 0.95, "C", transform=axL.transAxes,
+    axL.text(0.02, 0.95, panel_letters[0], transform=axL.transAxes,
              fontsize=16, fontweight="bold", va="top")
 
     # ── Panel D: renal clearances ─────────────────────────────────────────────
@@ -547,26 +569,12 @@ def create_figure_bars_generic(
                 clearance_fn(sol, c_idx, ae_idx, window)
             )
 
-    axR.bar(x_s0, clears[sc0], width, label=sc0,
+    axR.bar(x_s0, clears[sc0], width, label=_legend_label(sc0),
             color=colors[sc0], alpha=0.85, edgecolor="black", linewidth=0.5)
-    axR.bar(x_s1, clears[sc1], width, label=sc1,
+    axR.bar(x_s1, clears[sc1], width, label=_legend_label(sc1),
             color=colors[sc1], alpha=0.85, edgecolor="black", linewidth=0.5)
-    axR.bar(x_s2, clears[sc2], width, label=sc2,
+    axR.bar(x_s2, clears[sc2], width, label=_legend_label(sc2),
             color=colors[sc2], alpha=0.85, edgecolor="black", linewidth=0.5)
-
-    # Literature clearance error bars (plotted at x_s0 position)
-    litc_vals = [lit_clear[t]["value"] for t in toxins]
-    litc_lo   = [lit_clear[t]["value"] - lit_clear[t]["range"][0] for t in toxins]
-    litc_hi   = [lit_clear[t]["range"][1] - lit_clear[t]["value"]  for t in toxins]
-
-    # axR.errorbar(
-    #     x_s0, litc_vals,
-    #     yerr=[litc_lo, litc_hi],
-    #     fmt="D", color="black", markerfacecolor="black",
-    #     markersize=6, capsize=5, capthick=2, elinewidth=2,
-    #     label="Literature CKD",
-    #     zorder=5,
-    # )
 
     axR.set_xlabel("Toxins", fontsize=16)
     axR.set_ylabel("Clearance (L/h)", fontsize=16)
@@ -576,32 +584,33 @@ def create_figure_bars_generic(
     axR.grid(True, alpha=0.25, axis="y")
     axR.spines["top"].set_visible(False)
     axR.spines["right"].set_visible(False)
-    axR.text(0.02, 0.95, "D", transform=axR.transAxes,
+    axR.text(0.02, 0.95, panel_letters[1], transform=axR.transAxes,
              fontsize=16, fontweight="bold", va="top")
 
     # ── Shared legend below both panels ───────────────────────────────────────
-    # Remove any per-axes legends first
     for ax in (axL, axR):
         leg = ax.get_legend()
         if leg is not None:
             leg.remove()
 
-    h1, l1 = axL.get_legend_handles_labels()
-    h2, l2 = axR.get_legend_handles_labels()
-    handles, labels = _dedupe_legend(h1 + h2, l1 + l2)
+    if show_legend:
+        h1, l1 = axL.get_legend_handles_labels()
+        h2, l2 = axR.get_legend_handles_labels()
+        handles, labels = _dedupe_legend(h1 + h2, l1 + l2)
 
-    fig.legend(
-        handles, labels,
-        loc="lower center",
-        ncol=legend_ncol,
-        frameon=False,
-        fontsize=legend_fontsize,
-        bbox_to_anchor=legend_bbox,
-        columnspacing=2.3,
-        handlelength=2.4,
-    )
+        fig.legend(
+            handles, labels,
+            loc="lower center",
+            ncol=legend_ncol,
+            frameon=False,
+            fontsize=legend_fontsize,
+            bbox_to_anchor=legend_bbox,
+            columnspacing=2.3,
+            handlelength=2.4,
+        )
 
-    fig.tight_layout(rect=[0, 0, 1, 0.93])
+    if apply_tight_layout:
+        fig.tight_layout(rect=[0, 0, 1, 0.93])
     return fig
 
 
