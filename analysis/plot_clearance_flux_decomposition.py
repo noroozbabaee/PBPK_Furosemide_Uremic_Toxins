@@ -2,10 +2,10 @@
 Kidney PBPK Model — clearance flux decomposition driver [ScenarioManager-compatible]
 
 Scenarios (each launched from steady-state):
-  1) Healthy — No Drug
-  2) Healthy — With Drug
-  3) CKD-5  — No Drug
-  4) CKD-5  — With Drug
+  1) Healthy — No Furosemide
+  2) Healthy — With Furosemide
+  3) CKD-5  — No Furosemide
+  4) CKD-5  — With Furosemide
 
 Decomposes total renal clearance for furosemide and each uremic toxin
 (IS, HA, pCS) into its OAT1-mediated active-transport and passive-diffusion
@@ -100,16 +100,16 @@ BASELINE_IC = {
 # Greyscale palette + hatch patterns (COSMETIC ONLY)
 # ---------------------------------------------------------------------
 SCENARIO_COLORS = {
-    "Healthy No Drug":   "#4D4D4D",
-    "Healthy With Drug": "#9E9E9E",
-    "CKD-5 No Drug":     "#7A7A7A",
-    "CKD-5 With Drug":   "#BDBDBD",
+    "Healthy No Furosemide":   "#4D4D4D",
+    "Healthy With Furosemide": "#9E9E9E",
+    "CKD-5 No Furosemide":     "#7A7A7A",
+    "CKD-5 With Furosemide":   "#BDBDBD",
 }
 SCENARIO_HATCHES = {
-    "Healthy No Drug":   "",
-    "Healthy With Drug": "//",
-    "CKD-5 No Drug":     "xx",
-    "CKD-5 With Drug":   "..",
+    "Healthy No Furosemide":   "",
+    "Healthy With Furosemide": "//",
+    "CKD-5 No Furosemide":     "xx",
+    "CKD-5 With Furosemide":   "..",
 }
 
 DISPLAY_NAME = {
@@ -139,7 +139,15 @@ def _save(fig, outdir: str, name: str, exts=("png", "pdf"), dpi: int = 300) -> N
         except Exception as e:
             print(f"(plotting.save_figure failed for '{name}': {e})")
     for ext in exts:
-        fig.savefig(f"{base}.{ext}", dpi=dpi, bbox_inches="tight")
+        path = f"{base}.{ext}"
+        fig.savefig(path, dpi=dpi, bbox_inches="tight")
+        print(f"  Saved {path}")
+        if name == "09_flux_decomposition_PBUTs_greyscale":
+            pub_dir = os.path.join(_THIS_DIR, "..", "publication_code", "Figures")
+            os.makedirs(pub_dir, exist_ok=True)
+            pub = os.path.join(pub_dir, f"{name}.{ext}")
+            fig.savefig(pub, dpi=dpi, bbox_inches="tight")
+            print(f"  Saved {pub}")
 
 
 def _steady_state_check(sol, label: str, rel_cv_thresh: float = 0.01) -> bool:
@@ -440,10 +448,10 @@ def reach_steady_state():
 
 def run_main_scenarios(sol_H_ss, sol_C_ss):
     scenarios = {
-        "Healthy No Drug":  dict(scenario_name="H_NO_DRUG",      mode="healthy", ic=_ic_from_solution(sol_H_ss)),
-        "Healthy With Drug":dict(scenario_name="H_WITH_DRUG",    mode="healthy", ic=_ss_to_drug_start_ic(sol_H_ss)),
-        "CKD-5 No Drug":    dict(scenario_name="CKD_NO_DRUG",    mode="ckd5",    ic=_ic_from_solution(sol_C_ss)),
-        "CKD-5 With Drug":  dict(scenario_name="CKD_WITH_DRUG",  mode="ckd5",    ic=_ss_to_drug_start_ic(sol_C_ss)),
+        "Healthy No Furosemide":  dict(scenario_name="H_NO_DRUG",      mode="healthy", ic=_ic_from_solution(sol_H_ss)),
+        "Healthy With Furosemide":dict(scenario_name="H_WITH_DRUG",    mode="healthy", ic=_ss_to_drug_start_ic(sol_H_ss)),
+        "CKD-5 No Furosemide":    dict(scenario_name="CKD_NO_DRUG",    mode="ckd5",    ic=_ic_from_solution(sol_C_ss)),
+        "CKD-5 With Furosemide":  dict(scenario_name="CKD_WITH_DRUG",  mode="ckd5",    ic=_ss_to_drug_start_ic(sol_C_ss)),
     }
     solutions = {}
     meta      = {}
@@ -461,6 +469,7 @@ def run_main_scenarios(sol_H_ss, sol_C_ss):
 # Main
 # ---------------------------------------------------------------------
 def main() -> Dict[str, object]:
+    K.VERBOSE = False
     if hasattr(plotting, "setup_professional_style"):
         try: plotting.setup_professional_style()
         except Exception: pass
