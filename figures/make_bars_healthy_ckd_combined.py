@@ -21,11 +21,18 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.join(_THIS_DIR, "..")
+_PARENT = os.path.abspath(os.path.join(_THIS_DIR, ".."))
+# Nested under publication_code/figures → still use the repo src/analysis/results
+if os.path.basename(_PARENT) == "publication_code":
+    _ROOT = os.path.abspath(os.path.join(_PARENT, ".."))
+else:
+    _ROOT = _PARENT
 _ANALYSIS = os.path.join(_ROOT, "analysis")
 _SRC = os.path.join(_ROOT, "src")
 _RESULTS = os.path.join(_ROOT, "results")
+_PUB_FIGURES = os.path.join(_ROOT, "publication_code", "Figures")
 os.makedirs(_RESULTS, exist_ok=True)
+os.makedirs(_PUB_FIGURES, exist_ok=True)
 for _p in (_SRC, _ANALYSIS):
     if _p not in sys.path:
         sys.path.insert(0, _p)
@@ -121,7 +128,7 @@ def main() -> None:
     _fig_t_h, _fig_b_h, sol_h = run_healthy_and_plot(
         window=(0.0, 12.0),
         t_ss=1500.0,
-        t_sim=2.0,
+        t_sim=12.0,
         dt_ss=0.5,
         dt_sim=0.02,
     )
@@ -129,9 +136,9 @@ def main() -> None:
     plt.close(_fig_b_h)
 
     _fig_t_c, _fig_b_c, sol_c = run_ckd_and_plot(
-        window=(0.0, 2.0),
-        t_pre_h=15000.0,
-        t_main_h=2.0,
+        window=(0.0, 12.0),
+        t_pre_h=2100.0,
+        t_main_h=12.0,
         dt_pre=0.5,
         dt_main=0.02,
     )
@@ -139,13 +146,16 @@ def main() -> None:
     plt.close(_fig_b_c)
 
     fig = build_combined_bars_figure(
-        sol_h, sol_c, window_h=(0.0, 12.0), window_c=(0.0, 2.0),
+        sol_h, sol_c, window_h=(0.0, 12.0), window_c=(0.0, 12.0),
     )
     stem = os.path.join(_RESULTS, "bars_healthy_ckd_combined")
     for ext in ("png", "pdf"):
         p = f"{stem}.{ext}"
         fig.savefig(p, dpi=300, bbox_inches="tight")
         print(f"  Saved {p}")
+        pub = os.path.join(_PUB_FIGURES, f"bars_healthy_ckd_combined.{ext}")
+        fig.savefig(pub, dpi=300, bbox_inches="tight")
+        print(f"  Saved {pub}")
     plt.close(fig)
 
 

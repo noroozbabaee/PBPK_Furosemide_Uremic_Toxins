@@ -175,7 +175,12 @@ lowering them gives you a fast smoke test.
 | File | Role |
 |---|---|
 | `make_three_way_comparison_figure.py` | Publication 4-panel figure: ODE vs theoretical-Analytical vs Clinical comparison, reads `.npz` results produced by `dose_response_tid_vs_qd.py` |
+| `make_bars_healthy_ckd_combined.py` | **Figure 3**: 2×2 Healthy (A/B) + CKD-5 (C/D) toxin bars vs literature; one 4-entry legend |
 | `heatmap_ki_vmax_from_cache.py` | Publication-styled Ki×Vmax heatmap (horizontal colorbar layout); imports `compute_heatmap()` directly from `analysis/heatmap_ki_vmax_sensitivity_ode.py` rather than duplicating the simulation logic — both scripts share one cache file |
+
+### `publication_code/` — paper-facing copy
+
+Same keepers as `src/`, `analysis/`, and `figures/`, plus `publication_code/Figures/` for manuscript includes such as `bars_healthy_ckd_combined.pdf`. See `publication_code/README.md`.
 
 ---
 
