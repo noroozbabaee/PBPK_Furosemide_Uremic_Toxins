@@ -156,6 +156,8 @@ def _create_drug_base():
         "Km_baso_uptake_uM":  38.90,
         "Km_baso_uptake":     12.87,
         "Vmax_baso_uptake":   4500.0,  # ROUND6: 6000->4500 to reduce apical bottleneck
+        # OAT1 share of total basolateral Vmax (1.5/2.5); ODE uses this when use_oat3 is False
+        "Vmax_OAT1":          2700.0,
 
         # ── OAT3 basolateral uptake ─────────────────────────────────────────
         # Vmax_OAT3 = Vmax_OAT1 / 1.5 (expression ratio; Scotcher 2016)
