@@ -201,7 +201,7 @@ items as of this repository's last update:
 
 2. **`furosemide_iv_pk_validation.py`'s own literature-validation check**
    shows CKD-5 Cmax, t½, and AUC outside the cited literature target
-   ranges (flagged with ⚠ in its console output) for the IV dosing
+   ranges for the IV dosing
    protocol it tests. This is a known, currently-unresolved calibration
    gap in the IV pharmacokinetics specifically — separate from the oral
    chronic-dosing results in `dose_response_tid_vs_qd.py`, which are
