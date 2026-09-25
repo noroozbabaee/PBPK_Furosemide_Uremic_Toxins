@@ -42,6 +42,21 @@ _PUB_FIG = os.path.join(_ROOT, "publication_code", "Figures")
 os.makedirs(_RESULTS, exist_ok=True)
 os.makedirs(_PUB_FIG, exist_ok=True)
 
+# Windows layouts often keep NPZs next to publication_code or under analysis/.
+_SEARCH_DIRS = []
+for _d in (
+    _RESULTS,
+    os.path.join(_PARENT, "results"),
+    os.path.join(_THIS_DIR, "results"),
+    os.path.join(_ROOT, "figures"),
+    os.path.join(_PARENT, "figures"),
+    os.path.join(os.getcwd(), "results"),
+    os.getcwd(),
+):
+    _d = os.path.abspath(_d)
+    if os.path.isdir(_d) and _d not in _SEARCH_DIRS:
+        _SEARCH_DIRS.append(_d)
+
 # CKD-5 no-drug IS is tens of mg/L; healthy IS is ~0.4–0.7 mg/L.
 CKD_IS_BASE_MIN = 8.0
 CKD_IS_BASE_MAX = 80.0
@@ -68,21 +83,115 @@ def _f(cache, key, default=None):
     return float(np.asarray(cache[key]).flat[0])
 
 
+def _dose_tokens(dose: float) -> tuple[str, ...]:
+    """Filename dose spellings used by current and older cache writers."""
+    raw = f"{dose:.4g}"
+    alts = {raw, f"{dose:.0f}", f"{dose:.1f}", f"{int(dose)}"}
+    return tuple(sorted(alts, key=len))
+
+
+def _cache_ok_for_slot(path: str, dose: float, n_doses: int) -> tuple[bool, str]:
+    """Accept CKD-5 chronic content even if the filename omits `_ckd5_`."""
+    try:
+        cache = np.load(path, allow_pickle=False)
+    except Exception as exc:
+        return False, f"unreadable ({exc})"
+    fname = os.path.basename(path)
+    if "healthy" in fname.lower():
+        return False, "filename says healthy"
+    mode = _f(cache, "MODE_CODE")
+    if mode is not None and abs(mode - 0.0) < 1e-9:
+        return False, f"MODE_CODE={mode} (healthy)"
+    if mode is not None and abs(mode - 5.0) > 1e-9:
+        return False, f"MODE_CODE={mode}"
+    stored_dose = _f(cache, "DOSE_PER_ADMIN")
+    stored_n = _f(cache, "DOSING_CODE")
+    if stored_dose is not None and abs(stored_dose - dose) > 1e-6:
+        return False, f"DOSE_PER_ADMIN={stored_dose}"
+    if stored_n is not None and abs(stored_n - n_doses) > 1e-6:
+        return False, f"DOSING_CODE={stored_n}"
+    n_days = _f(cache, "N_DAYS")
+    if n_days is not None and abs(n_days - N_DAYS) > 1e-6:
+        return False, f"N_DAYS={n_days}"
+    if "t_all" not in cache.files or "IS_all" not in cache.files:
+        return False, "missing t_all/IS_all"
+    t = np.asarray(cache["t_all"], dtype=float)
+    if t.size == 0 or t[-1] < (N_DAYS - 0.5) * TAU_H:
+        return False, f"series ends at t={0 if t.size == 0 else t[-1]:.1f} h"
+    IS_base = _f(cache, "IS_base")
+    if IS_base is None:
+        return False, "missing IS_base"
+    if not (CKD_IS_BASE_MIN <= IS_base <= CKD_IS_BASE_MAX):
+        return False, f"IS_base={IS_base:.3f} (not CKD-5)"
+    return True, "ok"
+
+
 def _find_cache(dose: float, n_doses: int) -> str:
-    """Newest CKD-5 chronic cache for this dose × frequency. No healthy files."""
-    dose_str = f"{dose:.4g}"
-    pattern = os.path.join(
-        _RESULTS,
-        f"chronic_oral_cache_*_dose{dose_str}mg_x{n_doses}pd_{N_DAYS}days_ckd5_*.npz",
+    """Newest matching CKD-5 chronic cache (filename or contents)."""
+    patterns = []
+    for folder in _SEARCH_DIRS:
+        for tok in _dose_tokens(dose):
+            patterns.extend(
+                (
+                    os.path.join(
+                        folder,
+                        f"chronic_oral_cache_*dose{tok}mg_x{n_doses}pd_{N_DAYS}days_ckd5*.npz",
+                    ),
+                    os.path.join(
+                        folder,
+                        f"chronic_oral_cache_*dose{tok}mg_x{n_doses}pd_{N_DAYS}days*.npz",
+                    ),
+                    os.path.join(
+                        folder,
+                        f"results_*dose{tok}mg_x{n_doses}pd_{N_DAYS}days*.npz",
+                    ),
+                )
+            )
+    seen: list[str] = []
+    for pat in patterns:
+        for hit in glob.glob(pat):
+            if hit not in seen:
+                seen.append(hit)
+
+    accepted: list[str] = []
+    rejected: list[str] = []
+    for path in seen:
+        ok, why = _cache_ok_for_slot(path, dose, n_doses)
+        if ok:
+            accepted.append(path)
+        else:
+            rejected.append(f"  {os.path.basename(path)}: {why}")
+
+    if accepted:
+        def _rank(p: str):
+            try:
+                c = np.load(p, allow_pickle=False)
+                has_ha = int("HA_all" in c.files)
+            except Exception:
+                has_ha = 0
+            name = os.path.basename(p).lower()
+            return (
+                has_ha,
+                int(name.startswith("chronic_oral_cache")),
+                int("_ckd5" in name),
+                os.path.getmtime(p),
+            )
+
+        accepted.sort(key=_rank)
+        return accepted[-1]
+
+    looked = "\n".join(f"  {d}" for d in _SEARCH_DIRS)
+    extra = "\n".join(rejected[:12]) if rejected else "  (no matching filenames)"
+    raise FileNotFoundError(
+        f"No CKD-5 chronic cache for {dose:g} mg × {n_doses}/day.\n"
+        f"Searched:\n{looked}\n"
+        f"Candidates:\n{extra}\n"
+        "Generate it with:\n"
+        "  python analysis/regenerate_chronic_caches.py\n"
+        "or copy "
+        f"chronic_oral_cache_*dose{dose:.0f}mg_x{n_doses}pd_30days*.npz "
+        "into the repo results/ folder."
     )
-    hits = sorted(glob.glob(pattern))
-    if not hits:
-        raise FileNotFoundError(
-            f"No CKD-5 chronic cache for {dose:g} mg × {n_doses}/day.\n"
-            f"  looked for: {pattern}\n"
-            "  Do not substitute a healthy or single-dose NPZ."
-        )
-    return hits[-1]
 
 
 def _last_day_avg(t, y):
@@ -102,8 +211,6 @@ def load_regimen(name: str, dose: float, n_doses: int) -> dict:
     path = _find_cache(dose, n_doses)
     cache = np.load(path, allow_pickle=False)
     fname = os.path.basename(path)
-    if "_ckd5_" not in fname.lower():
-        raise RuntimeError(f"{name}: refused {fname} (filename is not CKD-5 chronic)")
 
     mode = _f(cache, "MODE_CODE")
     if mode is not None and abs(mode - 5.0) > 1e-9:
@@ -133,7 +240,12 @@ def load_regimen(name: str, dose: float, n_doses: int) -> dict:
         )
 
     if "HA_all" not in cache.files:
-        raise RuntimeError(f"{name}: {fname} has no HA_all — not a chronic HA cache")
+        print(f"  [warn] {fname} has no HA_all — HA panel will be omitted")
+        HA = np.zeros_like(np.asarray(cache["IS_all"], dtype=float))
+        HA_missing = True
+    else:
+        HA = np.asarray(cache["HA_all"], dtype=float)
+        HA_missing = False
 
     IS_base = _f(cache, "IS_base")
     if IS_base is None:
@@ -148,7 +260,6 @@ def load_regimen(name: str, dose: float, n_doses: int) -> dict:
 
     t = np.asarray(cache["t_all"], dtype=float)
     IS = np.asarray(cache["IS_all"], dtype=float)
-    HA = np.asarray(cache["HA_all"], dtype=float)
     pCS = np.asarray(cache["pCS_all"], dtype=float)
     drg = np.asarray(cache["drg_all"], dtype=float)
     if t[-1] < (N_DAYS - 0.5) * TAU_H:
@@ -272,7 +383,11 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+    except FileNotFoundError as exc:
+        print("\n[MISSING CACHE] Need the CKD-5 30-day NPZ for this arm.", file=sys.stderr)
+        print(exc, file=sys.stderr)
+        sys.exit(1)
+    except (RuntimeError, ValueError) as exc:
         print("\n[REFUSED] Comparison aborted — files are not the same study arm.", file=sys.stderr)
         print(exc, file=sys.stderr)
         sys.exit(1)
