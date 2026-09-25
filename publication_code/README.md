@@ -56,6 +56,10 @@ PYTHONUTF8=1 python3 figures/make_ppt_furosemide_24h.py
 
 Insert `publication_code/Figures/chronic_oral_furosemide_24h_cycle_ppt_legend.png` into PowerPoint (400 dpi). PDF/SVG are in the same folder.
 
+## Dosing comparison (CKD-5 chronic only)
+
+`analysis/compare_dosing_regimens_grey_HA_ADDED.py` loads **only** `chronic_oral_cache_*_ckd5_*.npz` for 40×3, 240×1, and 80×3. It refuses a healthy/acute 240 mg file (`IS_base` ~0.5 mg/L). Do not glob NPZs without `_ckd5_` in the name.
+
 
 ## Figure 4 — PBUT flux decomposition
 
