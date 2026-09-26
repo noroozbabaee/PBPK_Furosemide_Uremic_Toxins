@@ -33,6 +33,12 @@ TID 120, QD 240, TID 240, no-drug CKD-5. Requires 30-day ODE arms (HA is stored 
 PYTHONUTF8=1 python3 figures/make_chronic_oral_five_panel.py
 ```
 
+% change bars (IS / p-CS / HA; TID 120 vs QD 240 vs TID 240):
+
+```bash
+PYTHONUTF8=1 python3 figures/make_chronic_oral_pct_bars.py
+```
+
 ## 240 mg per dose — once daily vs three times daily
 
 | Outputs | Script |
