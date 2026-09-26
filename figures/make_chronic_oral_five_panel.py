@@ -22,7 +22,42 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib import font_manager
 import numpy as np
+
+
+def _set_times_new_roman() -> None:
+    """Prefer Times New Roman (Windows); Liberation Serif on Linux."""
+    available = {f.name for f in font_manager.fontManager.ttflist}
+    chosen = next(
+        (
+            name
+            for name in (
+                "Times New Roman",
+                "TimesNewRoman",
+                "Nimbus Roman",
+                "Liberation Serif",
+                "Times",
+            )
+            if name in available
+        ),
+        "serif",
+    )
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": [
+                chosen,
+                "Times New Roman",
+                "Liberation Serif",
+                "DejaVu Serif",
+            ],
+            "mathtext.fontset": "stix",
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "axes.unicode_minus": False,
+        }
+    )
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PARENT = os.path.abspath(os.path.join(_THIS_DIR, ".."))
@@ -102,13 +137,24 @@ def _load_or_run(ic_ss, live_pk, dose, n_doses, times):
 def _style(ax):
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.tick_params(labelsize=9)
+    ax.tick_params(labelsize=10, pad=3)
 
 
 def plot(runs) -> plt.Figure:
-    fig = plt.figure(figsize=(11.2, 6.6))
-    gs = gridspec.GridSpec(2, 6, figure=fig, hspace=0.42, wspace=0.55,
-                           left=0.07, right=0.99, top=0.96, bottom=0.16)
+    _set_times_new_roman()
+    # Extra width + large wspace so y-labels of A/B/C and D/E do not collide.
+    fig = plt.figure(figsize=(14.2, 8.0))
+    gs = gridspec.GridSpec(
+        2,
+        6,
+        figure=fig,
+        hspace=0.62,
+        wspace=1.15,
+        left=0.08,
+        right=0.985,
+        top=0.95,
+        bottom=0.16,
+    )
     axA = fig.add_subplot(gs[0, 0:2])
     axB = fig.add_subplot(gs[0, 2:4])
     axC = fig.add_subplot(gs[0, 4:6])
@@ -116,48 +162,82 @@ def plot(runs) -> plt.Figure:
     axE = fig.add_subplot(gs[1, 3:6])
 
     top = (
-        (axA, "IS_all", "IS plasma concentration (mg/L)", "A"),
-        (axB, "pCS_all", "p-CS plasma concentration (mg/L)", "B"),
-        (axC, "HA_all", "HA plasma concentration (mg/L)", "C"),
+        (axA, "IS_all", "IS plasma\nconcentration (mg/L)", "A"),
+        (axB, "pCS_all", "p-CS plasma\nconcentration (mg/L)", "B"),
+        (axC, "HA_all", "HA plasma\nconcentration (mg/L)", "C"),
     )
     for ax, key, ylab, letter in top:
         for label, data, ls, c, lw in runs:
             t_d = np.asarray(data["t_all"]) / 24.0
             ax.plot(t_d, data[key], ls=ls, color=c, lw=lw, label=label)
-        ax.set_xlabel("Time (days)", fontsize=9)
-        ax.set_ylabel(ylab, fontsize=9)
+        ax.set_xlabel("Time (days)", fontsize=11)
+        ax.set_ylabel(ylab, fontsize=11, labelpad=8)
         ax.set_xlim(0, 30)
         _style(ax)
-        ax.text(0.02, 0.95, letter, transform=ax.transAxes,
-                fontsize=13, fontweight="bold", va="top")
+        ax.text(
+            0.02,
+            0.97,
+            letter,
+            transform=ax.transAxes,
+            fontsize=14,
+            fontweight="bold",
+            va="top",
+            fontfamily="serif",
+        )
 
     t_lo, t_hi = 27.0 * 24.0, 30.0 * 24.0
     for label, data, ls, c, lw in runs:
         t = np.asarray(data["t_all"])
         m = (t >= t_lo) & (t <= t_hi)
         axD.plot(t[m] / 24.0, data["drg_all"][m], ls=ls, color=c, lw=lw, label=label)
-    axD.set_xlabel("Time (days), final 3-day window", fontsize=9)
-    axD.set_ylabel("Furosemide plasma concentration (mg/L)", fontsize=9)
+    axD.set_xlabel("Time (days), final 3-day window", fontsize=11)
+    axD.set_ylabel("Furosemide plasma\nconcentration (mg/L)", fontsize=11, labelpad=8)
     axD.set_xlim(27, 30)
     _style(axD)
-    axD.text(0.02, 0.95, "D", transform=axD.transAxes,
-             fontsize=13, fontweight="bold", va="top")
+    axD.text(
+        0.02,
+        0.97,
+        "D",
+        transform=axD.transAxes,
+        fontsize=14,
+        fontweight="bold",
+        va="top",
+        fontfamily="serif",
+    )
 
     for label, data, ls, c, lw in runs:
         t = np.asarray(data["t_all"])
         t0 = 29.0 * 24.0
         m = (t >= t0) & (t <= t0 + 24.0)
         axE.plot(t[m] - t0, data["drg_all"][m], ls=ls, color=c, lw=lw, label=label)
-    axE.set_xlabel("Time within final 24-h dosing cycle (h)", fontsize=9)
-    axE.set_ylabel("Furosemide plasma concentration (mg/L)", fontsize=9)
+    axE.set_xlabel("Time within final 24-h dosing cycle (h)", fontsize=11)
+    axE.set_ylabel("Furosemide plasma\nconcentration (mg/L)", fontsize=11, labelpad=8)
     axE.set_xlim(0, 24)
     _style(axE)
-    axE.text(0.02, 0.95, "E", transform=axE.transAxes,
-             fontsize=13, fontweight="bold", va="top")
+    axE.text(
+        0.02,
+        0.97,
+        "E",
+        transform=axE.transAxes,
+        fontsize=14,
+        fontweight="bold",
+        va="top",
+        fontfamily="serif",
+    )
 
     handles, labels = axA.get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=4, frameon=False,
-               fontsize=9, bbox_to_anchor=(0.5, 0.01), columnspacing=1.6)
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=4,
+        frameon=False,
+        fontsize=11,
+        bbox_to_anchor=(0.5, 0.005),
+        columnspacing=1.8,
+        handlelength=2.6,
+        prop={"family": "serif", "size": 11},
+    )
     return fig
 
 
