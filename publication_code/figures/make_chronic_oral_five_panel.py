@@ -90,6 +90,9 @@ import constants as K  # noqa: E402
 K.VERBOSE = False
 
 import dose_response_tid_vs_qd as gen  # noqa: E402
+import compare_dosing_regimens_grey_HA_ADDED as cmp  # noqa: E402
+
+K.VERBOSE = False
 
 
 JOBS = (
@@ -99,6 +102,37 @@ JOBS = (
     ("TID 240 mg/day", 80.0, 3, [0.0, 8.0, 16.0], "-", "0.0", 1.8),
     ("No-drug CKD-5 baseline", 0.0, 0, [], "-", "0.45", 1.2),
 )
+
+
+def _arrays_from_cache(path: str) -> dict:
+    d = np.load(path, allow_pickle=False)
+    need = ("t_all", "IS_all", "HA_all", "pCS_all", "drg_all")
+    missing = [k for k in need if k not in d.files]
+    if missing:
+        raise FileNotFoundError(f"{os.path.basename(path)} missing {missing}")
+    print(f"  [CACHE] {os.path.basename(path)}", flush=True)
+    return {k: d[k] for k in need}
+
+
+def _nodrug_from_sibling() -> dict | None:
+    """Flat no-drug traces from a CKD-5 40×3 cache if dose0 NPZ is absent."""
+    try:
+        path = cmp._find_cache(40.0, 3)
+    except FileNotFoundError:
+        return None
+    d = np.load(path, allow_pickle=False)
+    t = np.asarray(d["t_all"])
+    is0 = float(np.asarray(d["IS_base"]).flat[0]) if "IS_base" in d.files else float(d["IS_all"][0])
+    ha0 = float(np.asarray(d["HA_base"]).flat[0]) if "HA_base" in d.files else float(d["HA_all"][0])
+    pcs0 = float(np.asarray(d["pCS_base"]).flat[0]) if "pCS_base" in d.files else float(d["pCS_all"][0])
+    print(f"  [CACHE] no-drug from baseline of {os.path.basename(path)}", flush=True)
+    return dict(
+        t_all=t,
+        IS_all=np.full_like(t, is0, dtype=float),
+        HA_all=np.full_like(t, ha0, dtype=float),
+        pCS_all=np.full_like(t, pcs0, dtype=float),
+        drg_all=np.zeros_like(t, dtype=float),
+    )
 
 
 def _cache_file(dose: float, n_doses: int) -> str:
@@ -112,7 +146,7 @@ def _cache_file(dose: float, n_doses: int) -> str:
 
 
 def _load_or_run(ic_ss, live_pk, dose, n_doses, times):
-    path = _cache_file(dose, n_doses)
+    K.VERBOSE = False
     saved = dict(
         DOSE_PER_ADMIN=gen.DOSE_PER_ADMIN,
         N_DOSES_PER_DAY=gen.N_DOSES_PER_DAY,
@@ -124,6 +158,19 @@ def _load_or_run(ic_ss, live_pk, dose, n_doses, times):
     gen.DOSE_TIMES_H = list(times)
     gen.DOSE_INTERVAL_H = gen.TAU_H if n_doses <= 1 else gen.TAU_H / float(n_doses)
 
+    try:
+        return _arrays_from_cache(cmp._find_cache(float(dose), int(n_doses)))
+    except FileNotFoundError:
+        pass
+
+    if int(n_doses) == 0:
+        nodrug = _nodrug_from_sibling()
+        if nodrug is not None:
+            for k, v in saved.items():
+                setattr(gen, k, v)
+            return nodrug
+
+    path = _cache_file(dose, n_doses)
     if gen._cache_is_valid(path, live_pk):
         d = np.load(path, allow_pickle=False)
         for k, v in saved.items():
@@ -256,10 +303,26 @@ def plot(runs) -> plt.Figure:
     return fig
 
 
+def _all_dose_caches_present() -> bool:
+    for _label, dose, n, _times, _ls, _c, _lw in JOBS:
+        if int(n) == 0:
+            continue
+        try:
+            cmp._find_cache(float(dose), int(n))
+        except FileNotFoundError:
+            return False
+    return True
+
+
 def main() -> None:
-    print("Warm-up + four 30-day CKD-5 arms for five-panel figure", flush=True)
-    ic_ss = gen.warmup()
-    live_pk = gen.extract_baseline_pk(ic_ss)
+    print("Five-panel chronic oral figure (CKD-5)", flush=True)
+    if _all_dose_caches_present():
+        print("  Existing 40×3, 240×1, 80×3 caches found — skip ODE warm-up.", flush=True)
+        ic_ss, live_pk = {}, {}
+    else:
+        print("  Cache missing — SS warm-up + 30-day arms.", flush=True)
+        ic_ss = gen.warmup()
+        live_pk = gen.extract_baseline_pk(ic_ss)
     runs = []
     for label, dose, n, times, ls, c, lw in JOBS:
         data = _load_or_run(ic_ss, live_pk, dose, n, times)
