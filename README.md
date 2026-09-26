@@ -13,6 +13,10 @@ known bug or limitation is documented rather than hidden, and the goal is
 that a new student or collaborator can clone this, run it, and understand
 *why* every parameter has the value it does.
 
+Manuscript / chronic-oral session memory (Table 1, caches, figure scripts,
+Windows pull): `.cursor/skills/pbpk-furosemide-paper/SKILL.md` and
+`docs/session_log_2026-09_chronic_oral.md`.
+
 ---
 
 ## What this model represents

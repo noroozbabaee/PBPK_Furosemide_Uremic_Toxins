@@ -2,6 +2,12 @@
 
 This folder is the paper-facing copy of the scripts that produce manuscript figures. The live sources remain in `src/`, `analysis/`, and `figures/` at the repository root; this tree is the same keepers, grouped for the paper workflow.
 
+Paper/session memory for agents and co-authors:
+
+- `.cursor/skills/pbpk-furosemide-paper/SKILL.md` — Table 1 numbers, blood vs plasma, cache rules, figure scripts, Windows commands
+- `docs/session_log_2026-09_chronic_oral.md` — full 25–26 Sep 2026 discussion log
+
+
 ## Figure 3 — toxin bars, Healthy vs CKD-5
 
 | Paper file | Script |
