@@ -276,9 +276,9 @@ def plot(runs) -> plt.Figure:
     axE = fig.add_subplot(gs[1, 3:6])
 
     top = (
-        (axA, "IS_all", "IS plasma\nconcentration (mg/L)", "A"),
-        (axB, "pCS_all", "p-CS plasma\nconcentration (mg/L)", "B"),
-        (axC, "HA_all", "HA plasma\nconcentration (mg/L)", "C"),
+        (axA, "IS_all", "IS plasma\nconcentration (mg/L)", "A. IS"),
+        (axB, "HA_all", "HA plasma\nconcentration (mg/L)", "B. HA"),
+        (axC, "pCS_all", "p-CS plasma\nconcentration (mg/L)", "C. pCS"),
     )
     for ax, key, ylab, letter in top:
         for label, data, ls, c, lw in runs:

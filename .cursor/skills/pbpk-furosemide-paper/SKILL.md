@@ -89,7 +89,7 @@ Gitignores `results/*`. **Keep local NPZs**; they are not on GitHub.
 
 | Figure | Script (repo root or `publication_code/` twin) |
 |---|---|
-| Five-panel A–E (IS, pCS, HA 30 d; furo days 27–30; furo last 24 h) | `figures/make_chronic_oral_five_panel.py` |
+| Five-panel A–E (IS, HA, pCS 30 d; furo days 27–30; furo last 24 h) | `figures/make_chronic_oral_five_panel.py` |
 | PPT panel E only | `figures/make_ppt_furosemide_24h.py` |
 | %Δ bars A–C (IS, pCS, HA; Total/Bound/Unbound; Costes CI) | `figures/make_chronic_oral_pct_bars.py` |
 | Time-course 2×2 check of three doses | `analysis/compare_dosing_regimens_grey_HA_ADDED.py` |
