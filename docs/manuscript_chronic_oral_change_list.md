@@ -86,4 +86,36 @@ If `chronic_oral_pct_bars.txt` prints slightly different one-decimal %Δ, use **
 - `results\chronic_oral_five_panel.pdf` / `.png`  
 - the three `*_ckd5.npz` caches above  
 
-Do not overwrite them with a healthy run.
+## Section: dosing schedule vs daily dose (`sec:results-dosing-comparison`)
+
+All three arms are **CKD-5** (`IS_base = 19.712` blood = plasma **28.16**). Healthy was not used.
+
+### KEEP
+
+- Three regimens: TID 120 (\(3\times40\)), QD 240 (\(1\times240\)), TID 240 (\(3\times80\)).
+- Same no-drug CKD-5 SS (plasma): IS **28.16**, HA **142.86**, pCS **24.99**.
+- HA remains ~1% (dose-sensitive but small).
+
+### CHANGE (stale % vs current NPZ / bar figure)
+
+| | Manuscript now | Current CKD-5 caches (last-day avg) |
+|---|---|---|
+| TID 120 IS | 15.8% | **~19.9%** |
+| TID 120 HA | 0.6% | **~0.7%** |
+| TID 120 pCS | 17.3% | **~20.3%** |
+| TID 240 IS | 28.1% | **~28.8%** |
+| TID 240 HA | 1.2% | **~1.1%** |
+| TID 240 pCS | 30.2% | **~30.8%** |
+
+15.8% and 17.3% are **not** the current 40×3 cache. 30.2% is the old pCS-% that did not match 33→43.86 (that pair is 32.9% and is obsolete anyway).
+
+### Logic of the paragraph
+
+The **title** is schedule independent of **total daily dose**.  
+The **sentence you quote** is doubling TID 120 → TID 240, which **changes total daily dose**. That is a dose-response, not a schedule effect.
+
+- Dose effect (same schedule): TID 120 vs TID 240. Current % do **not** double (19.9→28.8 is ×1.45, not ×2). Soften “approximately proportional”.
+- Schedule effect (same 240 mg/day): **QD 240 vs TID 240** (and vs TID 120 only as extra). QD 240 is listed in the opening but missing from this sentence — add it if the figure shows it.
+
+Ground truth after pull: `results/chronic_oral_pct_bars.txt` from the three `*_ckd5.npz` files.
+
