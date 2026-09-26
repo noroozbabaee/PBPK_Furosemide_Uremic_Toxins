@@ -112,8 +112,20 @@ HA %Δ bars: large **“No clinical HA data”**. Costes-Albrespic 2025: IS +31.
 
 `results\` and `pbpk_env\` are gitignored. Never `git clean -fdx`.
 
+**Always `cd` into the repo first.** `C:\Users\p70091319` is **not** a git repo. From the home folder:
+
+- `git pull origin cursor/chronic-oral-caches-ki035-ee8a` → `fatal: not a git repository`
+- `pbpk_env\Scripts\python.exe publication_code\analysis\...` → `The system cannot find the path specified`
+
 ```bat
-cd C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
+cd /d C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
+git pull origin cursor/chronic-oral-caches-ki035-ee8a
+```
+
+If checkout is blocked by local edits:
+
+```bat
+cd /d C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
 xcopy "%CD%" "C:\Users\p70091319\Desktop\PBPK_backup_before_github" /E /I /H /Y
 git fetch origin
 git stash push -u -m "windows local before github branch"
@@ -123,14 +135,62 @@ git reset --hard origin/cursor/chronic-oral-caches-ki035-ee8a
 
 Do **not** `git stash pop` (that restores broken scripts).
 
-### Commands (Command Prompt)
+### Commands (Command Prompt only — no PowerShell line-split, no `python -c` list comps)
+
+CMD breaks a wrapped `-c "... [print ...]"` into `'[print' is not recognized`. Never paste multi-line Python into CMD. Use a `.py` file.
 
 ```bat
+cd /d C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
+pbpk_env\Scripts\python.exe publication_code\analysis\compare_dosing_regimens_grey_HA_ADDED.py
+pbpk_env\Scripts\python.exe publication_code\analysis\check_cache_t0_pcs.py
 pbpk_env\Scripts\python.exe publication_code\figures\make_chronic_oral_five_panel.py
 pbpk_env\Scripts\python.exe publication_code\figures\make_chronic_oral_pct_bars.py
 pbpk_env\Scripts\python.exe publication_code\figures\combine_bar_figures_vector.py
-pbpk_env\Scripts\python.exe publication_code\analysis\compare_dosing_regimens_grey_HA_ADDED.py
 ```
+
+Five-panel: if `dose40mg_x3pd`, `dose240mg_x1pd`, `dose80mg_x3pd` CKD-5 NPZs exist, it **skips ODE warm-up**. Confirm the log says `Existing 40×3, 240×1, 80×3 caches found` and all `IS_base=19.712`.
+
+---
+
+## Windows run log (verified on this machine)
+
+Repo: `...\PBPK_Furosemide_Uremic_Toxins_pythoncode`  
+Branch after pull: `cursor/chronic-oral-caches-ki035-ee8a`  
+Interpreter: `pbpk_env\Scripts\python.exe`  
+CKD-5 scales in live `compound_parameters.py`: drug/tox baso **0.05**, apical **0.15**; GFR_scale **0.100**, RBF_scale **0.35**.
+
+### `compare_dosing_regimens_grey_HA_ADDED.py` (use these numbers in the paper)
+
+All three arms: **CKD-5**, `IS_base = 19.712` mg/L **blood** (plasma 28.16). Not healthy (~0.54).
+
+| Regimen | file | IS %Δ | HA %Δ | pCS %Δ | furo Cavg **blood** | furo Cmax **blood** |
+|---|---|---:|---:|---:|---:|---:|
+| TID 120 (40×3) | `..._dose40mg_x3pd_30days_ckd5.npz` | +15.8 | +0.6 | +17.3 | 2.168 | 3.601 |
+| QD 240 (240×1) | `..._dose240mg_x1pd_30days_ckd5.npz` | +24.6 | +1.3 | +27.2 | 4.772 | 16.645 |
+| TID 240 (80×3) | `..._dose80mg_x3pd_30days_ckd5.npz` | +28.1 | +1.2 | +32.9 | 4.358 | 7.173 |
+
+Plasma furosemide = blood / **0.82**: Cavg **2.644 / 5.819 / 5.315**; Cmax **4.39 / 20.3 / 8.75**.
+
+Last-24 h **blood** Cmax (DB / Dian): IS QD 25.020 ≤ TID 25.363; **HA QD 121.932 > TID 121.520**; pCS QD 23.056 ≤ TID 23.905. HA is the only toxin whose QD peak exceeds TID.
+
+Outputs: `results\dosing_comparison_timecourse.{png,pdf}` and `publication_code\Figures\...` same names.
+
+### `check_cache_t0_pcs.py` (local NPZs, do not mix for %Δ)
+
+`t0 = 0` on all files. **pCS[0] is not identical on every NPZ:**
+
+| file | pCS[0] blood | pCS_base | plasma0 (= blood/0.55) |
+|---|---:|---:|---:|
+| `dose120mg_x1pd` | 13.745 | 13.745 | 24.99 |
+| `dose40mg_x3pd` | 13.745 | 13.745 | 24.99 |
+| `dose240mg_x1pd` | 17.944 | 17.944 | 32.63 |
+| `dose80mg_x3pd` | 17.944 | 17.944 | 32.63 |
+
+The **published three-arm comparison** uses 40×3, 240×1, 80×3 with matching **IS_base = 19.712**. pCS %Δ is still vs each file’s own `pCS_base` (printed +17.3 / +27.2 / +32.9). Do not treat `dose120mg_x1pd` as a fourth paper arm unless re-simulated from the same warm-up SS.
+
+### `make_chronic_oral_five_panel.py`
+
+Log must include: skip warm-up; all four traces CKD-5 `IS_base ≈ 19.712`; first row **A. IS, B. HA, C. pCS**. Times New Roman, axis/legend 11 pt, panel letters 14 pt bold.
 
 ---
 
@@ -140,7 +200,9 @@ pbpk_env\Scripts\python.exe publication_code\analysis\compare_dosing_regimens_gr
 - **TM** — schematic arrows: \(Q_c\), \(Q_{\mathrm{kidney}}\), Bowman inlet (GFR plasma).
 - **AC / Aurélie** — no dialysis \(CL\) in Table 1; follow her table edits; “established” after “The PBPK model” is optional wording.
 - **KG** — fold change as ratios above; do not use dialysis \(CL\) as native \(CL_R\).
-- **RM** — keep phenotype of caches consistent.
+- **RM** — keep phenotype of caches consistent; table notes under the table (`threeparttable`).
+- **DB / Dian** — QD HA Cmax > TID HA Cmax; IS and pCS QD Cmax ≤ TID. Quote last-24 h peaks (plasma = blood/BP).
+- **LN** — all table Cmax and \(\overline{C}_{\mathrm{furo}}\) in **plasma**; old TID Cmax 3.7 and 7.1 were blood.
 
 Initiation protocol (no-drug SS vs with-drug 30 d vs IV PK extract):
 `docs/scenario_initiation_ckd5_chronic_oral.md`. Do not mix those three.

@@ -159,3 +159,13 @@ Change vs keep for the Results paragraph:
 - Do not use pCS pKa of a carboxylic acid.  
 - Do not pass `axes_pair` into the bar combiners.  
 - Do not Print-to-PDF from Acrobat if you need a cropped figure (use the script PDF).
+- Do not run `git` or `pbpk_env` from `C:\Users\p70091319` (not a repo). `cd /d` the pythoncode folder first.
+- Do not paste multi-line `python -c "[print ...]"` into CMD (`'[print' is not recognized`). Use `check_cache_t0_pcs.py`.
+
+---
+
+## 10. Windows CMD session (user machine)
+
+Full sequence that worked: `cd` repo → `git pull origin cursor/chronic-oral-caches-ki035-ee8a` → `compare_dosing...` → `check_cache_t0_pcs.py` → `make_chronic_oral_five_panel.py` (caches present, skip warm-up, all `IS_base=19.712`).
+
+Printed %Δ and blood Cmax/Cavg: see `.cursor/skills/pbpk-furosemide-paper/SKILL.md` (Windows run log). Five-panel first row: A IS, B HA, C pCS.
