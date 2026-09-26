@@ -137,7 +137,14 @@ Costes-Albrespic M et al. Kidney Int Rep 2025;10:2165, >120 mg/day:
 - pCS +29.3% (95% CI 6.1–57.8)  
 - HA: no clinical panel  
 
-ODE %Δ is last-day average vs no-drug `IS_base` / `pCS_base` / `HA_base` in the NPZ.
+Successful Windows bar run (26 Sep 2026): all three NPZs had **IS_base = 19.712 mg/L** (CKD-5, matched).
+
+- `chronic_oral_cache_Ki0p35_dose40mg_x3pd_30days_ckd5.npz`  TID 120
+- `chronic_oral_cache_Ki0p35_dose240mg_x1pd_30days_ckd5.npz` QD 240
+- `chronic_oral_cache_Ki0p35_dose80mg_x3pd_30days_ckd5.npz`  TID 240
+
+Share `results/chronic_oral_pct_bars.pdf` and `results/chronic_oral_pct_bars.txt`.
+
 
 ---
 

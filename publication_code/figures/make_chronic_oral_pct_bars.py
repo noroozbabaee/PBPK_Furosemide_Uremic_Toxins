@@ -236,11 +236,39 @@ def plot_pct_bars(rows: list[dict]) -> plt.Figure:
     return fig
 
 
+def _write_results_table(rows: list[dict]) -> None:
+    order = {n: i for i, (n, *_rest) in enumerate(cmp.REGIMENS)}
+    rows = sorted(rows, key=lambda r: order[r["name"]])
+    lines = [
+        "CKD-5 chronic oral % change vs no-drug baseline",
+        f"IS_base (all arms) = {rows[0]['IS_base']:.3f} mg/L  (must be CKD-5, not ~0.54)",
+        f"Clinical IS  {gen.CLIN_IS_PCT:+.1f}%  (95% CI {gen.CLIN_IS_LO:.1f} to {gen.CLIN_IS_HI:.1f})",
+        f"Clinical pCS {gen.CLIN_pCS_PCT:+.1f}%  (95% CI {gen.CLIN_pCS_LO:.1f} to {gen.CLIN_pCS_HI:.1f})",
+        "Clinical HA  none",
+        "",
+        f"{'Regimen':<16} {'file':<52} {'IS %':>8} {'pCS %':>8} {'HA %':>8}",
+        "-" * 92,
+    ]
+    for r in rows:
+        lines.append(
+            f"{r['name']:<16} {r['fname']:<52} "
+            f"{r['pct_IS']:>+7.1f}% {r['pct_pCS']:>+7.1f}% {r['pct_HA']:>+7.1f}%"
+        )
+    text = "\n".join(lines) + "\n"
+    print("\n" + text, flush=True)
+    for folder in (_RESULTS, _PUB_FIG):
+        p = os.path.join(folder, "chronic_oral_pct_bars.txt")
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        print(f"  Saved {p}", flush=True)
+
+
 def main() -> None:
     rows = []
     for name, dose, n, *_rest in cmp.REGIMENS:
         rows.append(cmp.load_regimen(name, dose, n))
     cmp._assert_same_phenotype(rows)
+    _write_results_table(rows)
     fig = plot_pct_bars(rows)
     stem = "chronic_oral_pct_bars"
     for folder in (_RESULTS, _PUB_FIG):
