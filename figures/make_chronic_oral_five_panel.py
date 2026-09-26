@@ -409,4 +409,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (RuntimeError, FileNotFoundError, ValueError) as exc:
+        print("\n[REFUSED] This figure is CKD-5 chronic oral only.", file=sys.stderr)
+        print(exc, file=sys.stderr)
+        sys.exit(1)
