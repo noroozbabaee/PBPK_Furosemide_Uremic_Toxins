@@ -133,6 +133,20 @@ Print exact toxin Cmax from caches:
 pbpk_env\Scripts\python.exe publication_code\analysis\compare_dosing_regimens_grey_HA_ADDED.py
 ```
 
-Look for `DB check (same 240 mg/day`.
+## Verified 26 Sep 2026 — `compare_dosing_regimens` (CKD-5, last-day AUC)
+
+All `IS_base = 19.712` mg/L blood. Plasma Css no-drug: IS 28.16, HA 142.86, pCS 24.99.
+
+| Regimen | IS %Δ | HA %Δ | pCS %Δ | furo Cavg blood | furo Cmax blood |
+|---|---:|---:|---:|---:|---:|
+| TID 120 | +15.8 | +0.6 | +17.3 | 2.168 | 3.601 |
+| QD 240 | +24.6 | +1.3 | +27.2 | 4.772 | 16.645 |
+| TID 240 | +28.1 | +1.2 | +32.9 | 4.358 | 7.173 |
+
+Last-day **blood Cmax**: IS QD 25.020 < TID 25.363; HA QD 121.932 > TID 121.520; pCS QD 23.056 < TID 23.905.
+
+Furosemide **plasma** (blood/0.82): QD \(C_{\max}=20.3\), TID \(C_{\max}=8.75\); QD \(C_{\mathrm{avg}}=5.82\), TID \(C_{\mathrm{avg}}=5.31\).
+The draft mixed plasma QD \(C_{\max}=20.3\) with blood TID \(C_{\max}=7.1\). Use one space only.
+
 
 
