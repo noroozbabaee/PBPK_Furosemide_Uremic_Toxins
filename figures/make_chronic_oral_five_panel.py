@@ -104,14 +104,60 @@ JOBS = (
 )
 
 
-def _arrays_from_cache(path: str) -> dict:
+CKD_IS_MIN = 8.0
+CKD_IS_MAX = 80.0
+HEALTHY_IS_MAX = 2.0  # healthy / acute IS_base is ~0.54 mg/L
+
+
+def _is_base_of(d) -> float:
+    if "IS_base" in getattr(d, "files", ()):
+        return float(np.asarray(d["IS_base"]).flat[0])
+    if isinstance(d, dict) and "IS_base" in d:
+        return float(np.asarray(d["IS_base"]).flat[0])
+    is_all = np.asarray(d["IS_all"] if not isinstance(d, dict) else d["IS_all"])
+    return float(is_all[0])
+
+
+def _refuse_if_not_ckd5(path: str, d, label: str) -> float:
+    """Abort if this NPZ is healthy/acute. Return IS_base."""
+    fname = os.path.basename(path) if path else label
+    lower = fname.lower()
+    if "healthy" in lower:
+        raise RuntimeError(
+            f"{label}: refused {fname} — filename is healthy, not CKD-5."
+        )
+    is_base = _is_base_of(d)
+    if is_base <= HEALTHY_IS_MAX:
+        raise RuntimeError(
+            f"{label}: IS_base={is_base:.3f} mg/L is HEALTHY/acute (~0.54), "
+            f"not CKD-5 (~20). File={fname}. Do not plot this with CKD-5 arms."
+        )
+    if not (CKD_IS_MIN <= is_base <= CKD_IS_MAX):
+        raise RuntimeError(
+            f"{label}: IS_base={is_base:.3f} mg/L is outside CKD-5 "
+            f"({CKD_IS_MIN:.0f}–{CKD_IS_MAX:.0f}). File={fname}."
+        )
+    mode = None
+    if hasattr(d, "files") and "MODE_CODE" in d.files:
+        mode = float(np.asarray(d["MODE_CODE"]).flat[0])
+    if mode is not None and abs(mode - 0.0) < 1e-9:
+        raise RuntimeError(f"{label}: MODE_CODE=0 (healthy) in {fname}")
+    if mode is not None and abs(mode - 5.0) > 1e-9:
+        raise RuntimeError(f"{label}: MODE_CODE={mode} in {fname}, expected CKD-5")
+    print(f"  [CKD-5] {label}: IS_base={is_base:.3f} mg/L  file={fname}", flush=True)
+    return is_base
+
+
+def _arrays_from_cache(path: str, label: str) -> dict:
     d = np.load(path, allow_pickle=False)
     need = ("t_all", "IS_all", "HA_all", "pCS_all", "drg_all")
     missing = [k for k in need if k not in d.files]
     if missing:
         raise FileNotFoundError(f"{os.path.basename(path)} missing {missing}")
-    print(f"  [CACHE] {os.path.basename(path)}", flush=True)
-    return {k: d[k] for k in need}
+    is_base = _refuse_if_not_ckd5(path, d, label)
+    out = {k: d[k] for k in need}
+    out["IS_base"] = np.array([is_base])
+    return out
 
 
 def _nodrug_from_sibling() -> dict | None:
@@ -121,17 +167,21 @@ def _nodrug_from_sibling() -> dict | None:
     except FileNotFoundError:
         return None
     d = np.load(path, allow_pickle=False)
+    _refuse_if_not_ckd5(path, d, "No-drug CKD-5 baseline")
     t = np.asarray(d["t_all"])
-    is0 = float(np.asarray(d["IS_base"]).flat[0]) if "IS_base" in d.files else float(d["IS_all"][0])
+    is0 = _is_base_of(d)
     ha0 = float(np.asarray(d["HA_base"]).flat[0]) if "HA_base" in d.files else float(d["HA_all"][0])
     pcs0 = float(np.asarray(d["pCS_base"]).flat[0]) if "pCS_base" in d.files else float(d["pCS_all"][0])
-    print(f"  [CACHE] no-drug from baseline of {os.path.basename(path)}", flush=True)
+    if is0 <= HEALTHY_IS_MAX:
+        raise RuntimeError("no-drug sibling cache is healthy — refused")
+    print(f"  [CACHE] no-drug CKD-5 SS from {os.path.basename(path)}", flush=True)
     return dict(
         t_all=t,
         IS_all=np.full_like(t, is0, dtype=float),
         HA_all=np.full_like(t, ha0, dtype=float),
         pCS_all=np.full_like(t, pcs0, dtype=float),
         drg_all=np.zeros_like(t, dtype=float),
+        IS_base=np.array([is0]),
     )
 
 
@@ -145,7 +195,7 @@ def _cache_file(dose: float, n_doses: int) -> str:
     )
 
 
-def _load_or_run(ic_ss, live_pk, dose, n_doses, times):
+def _load_or_run(label, ic_ss, live_pk, dose, n_doses, times):
     K.VERBOSE = False
     saved = dict(
         DOSE_PER_ADMIN=gen.DOSE_PER_ADMIN,
@@ -159,7 +209,7 @@ def _load_or_run(ic_ss, live_pk, dose, n_doses, times):
     gen.DOSE_INTERVAL_H = gen.TAU_H if n_doses <= 1 else gen.TAU_H / float(n_doses)
 
     try:
-        return _arrays_from_cache(cmp._find_cache(float(dose), int(n_doses)))
+        return _arrays_from_cache(cmp._find_cache(float(dose), int(n_doses)), label)
     except FileNotFoundError:
         pass
 
@@ -171,11 +221,14 @@ def _load_or_run(ic_ss, live_pk, dose, n_doses, times):
             return nodrug
 
     path = _cache_file(dose, n_doses)
-    if gen._cache_is_valid(path, live_pk):
+    if live_pk and gen._cache_is_valid(path, live_pk):
         d = np.load(path, allow_pickle=False)
+        _refuse_if_not_ckd5(path, d, label)
         for k, v in saved.items():
             setattr(gen, k, v)
-        return {k: d[k] for k in ("t_all", "IS_all", "HA_all", "pCS_all", "drg_all")}
+        out = {k: d[k] for k in ("t_all", "IS_all", "HA_all", "pCS_all", "drg_all")}
+        out["IS_base"] = np.array([_is_base_of(d)])
+        return out
 
     print(f"  simulating {n_doses}×{dose:g} mg ...", flush=True)
     t0 = time.time()
@@ -325,8 +378,26 @@ def main() -> None:
         live_pk = gen.extract_baseline_pk(ic_ss)
     runs = []
     for label, dose, n, times, ls, c, lw in JOBS:
-        data = _load_or_run(ic_ss, live_pk, dose, n, times)
+        data = _load_or_run(label, ic_ss, live_pk, dose, n, times)
         runs.append((label, data, ls, c, lw))
+    bases = [_is_base_of(data) for _lab, data, *_rest in runs]
+    mid = float(np.median(bases))
+    print("\n========== PHENOTYPE (must all be CKD-5) ==========", flush=True)
+    for (lab, data, *_rest), b in zip(runs, bases):
+        tag = "HEALTHY/ACUTE" if b <= HEALTHY_IS_MAX else "CKD-5"
+        print(f"  {lab:<28} IS_base={b:8.3f} mg/L  [{tag}]", flush=True)
+        if b <= HEALTHY_IS_MAX:
+            raise RuntimeError(
+                f"{lab} is {tag} (IS_base={b:.3f}). "
+                "This five-panel figure is CKD-5 chronic oral only."
+            )
+        if abs(b - mid) / max(mid, 1e-9) > 0.15:
+            raise RuntimeError(
+                f"IS_base mix: {lab}={b:.3f} vs group {mid:.3f}. "
+                "Healthy and CKD-5 caches were combined — refused."
+            )
+    print(f"  All four traces CKD-5, IS_base ≈ {mid:.3f} mg/L", flush=True)
+    print("==================================================\n", flush=True)
     fig = plot(runs)
     stem = "chronic_oral_five_panel"
     for folder in (_RESULTS, _PUB_FIG):

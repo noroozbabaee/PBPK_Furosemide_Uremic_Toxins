@@ -246,12 +246,17 @@ def _write_results_table(rows: list[dict]) -> None:
         f"Clinical pCS {gen.CLIN_pCS_PCT:+.1f}%  (95% CI {gen.CLIN_pCS_LO:.1f} to {gen.CLIN_pCS_HI:.1f})",
         "Clinical HA  none",
         "",
-        f"{'Regimen':<16} {'file':<52} {'IS %':>8} {'pCS %':>8} {'HA %':>8}",
-        "-" * 92,
+        f"{'Regimen':<16} {'phenotype':<16} {'file':<48} {'IS %':>8} {'pCS %':>8} {'HA %':>8}",
+        "-" * 108,
     ]
     for r in rows:
+        if r["IS_base"] <= 2.0:
+            raise RuntimeError(
+                f"{r['name']} IS_base={r['IS_base']:.3f} is HEALTHY/acute — "
+                "this bar figure is CKD-5 chronic only."
+            )
         lines.append(
-            f"{r['name']:<16} {r['fname']:<52} "
+            f"{r['name']:<16} {'CKD-5':<16} {r['fname']:<48} "
             f"{r['pct_IS']:>+7.1f}% {r['pct_pCS']:>+7.1f}% {r['pct_HA']:>+7.1f}%"
         )
     text = "\n".join(lines) + "\n"
