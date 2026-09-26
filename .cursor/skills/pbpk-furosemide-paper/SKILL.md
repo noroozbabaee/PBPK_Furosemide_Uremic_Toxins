@@ -142,7 +142,8 @@ pbpk_env\Scripts\python.exe publication_code\analysis\compare_dosing_regimens_gr
 - **KG** — fold change as ratios above; do not use dialysis \(CL\) as native \(CL_R\).
 - **RM** — keep phenotype of caches consistent.
 
-Paste-ready change/keep list for the chronic-oral Results subsection:
-`docs/manuscript_chronic_oral_change_list.md`.
+Initiation protocol (no-drug SS vs with-drug 30 d vs IV PK extract):
+`docs/scenario_initiation_ckd5_chronic_oral.md`. Do not mix those three.
+
 
 
