@@ -117,5 +117,22 @@ The **sentence you quote** is doubling TID 120 → TID 240, which **changes tota
 - Dose effect (same schedule): TID 120 vs TID 240. Current % do **not** double (19.9→28.8 is ×1.45, not ×2). Soften “approximately proportional”.
 - Schedule effect (same 240 mg/day): **QD 240 vs TID 240** (and vs TID 120 only as extra). QD 240 is listed in the opening but missing from this sentence — add it if the figure shows it.
 
-Ground truth after pull: `results/chronic_oral_pct_bars.txt` from the three `*_ckd5.npz` files.
+## DB (Dian): HA peak under QD but not IS/pCS
+
+Verified on Figure 5 (CKD-5, same 240 mg/day): **yes**.
+
+- **HA:** QD shows large within-day swings; QD **peaks exceed TID**. Time-averaged HA %Δ is almost the same (schedule-independent ~+1%).
+- **IS and pCS:** QD sits **below** TID all day; small ripple; QD **Cmax does not exceed TID**. Accumulation is higher with TID (more hours of OAT1 inhibition).
+- Why: HA \(f_{u,p}=0.52\), \(CL_R\approx0.49\) L/h, \(V_d=18\) L → tracks the furosemide pulse. IS/pCS are tightly bound and slower (\(CL_R\) 0.20 / 0.08 L/h).
+
+Furosemide last-day (ODE **blood**, y-label often says plasma): QD \(C_{\max}\approx20.3\) mg/L vs TID \(\approx7.1\) mg/L per peak; time-average \(\approx5.82\) vs \(5.31\) mg/L. Plasma = blood / 0.82 if the paper says plasma (\(24.8\) vs \(8.7\)).
+
+Print exact toxin Cmax from caches:
+
+```
+pbpk_env\Scripts\python.exe publication_code\analysis\compare_dosing_regimens_grey_HA_ADDED.py
+```
+
+Look for `DB check (same 240 mg/day`.
+
 
