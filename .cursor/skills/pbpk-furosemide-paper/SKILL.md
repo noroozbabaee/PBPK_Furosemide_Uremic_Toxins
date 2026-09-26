@@ -142,6 +142,7 @@ pbpk_env\Scripts\python.exe publication_code\analysis\compare_dosing_regimens_gr
 - **KG** — fold change as ratios above; do not use dialysis \(CL\) as native \(CL_R\).
 - **RM** — keep phenotype of caches consistent.
 
-Successful local bar run (26 Sep 2026): three NPZs, all `IS_base=19.712` mg/L (**CKD-5**, not healthy 0.54). Share `chronic_oral_pct_bars.pdf` and `.txt`.
-Five-panel and bar scripts now abort if any arm is healthy or IS_base values disagree.
+Paste-ready change/keep list for the chronic-oral Results subsection:
+`docs/manuscript_chronic_oral_change_list.md`.
+
 

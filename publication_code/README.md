@@ -6,6 +6,8 @@ Paper/session memory for agents and co-authors:
 
 - `.cursor/skills/pbpk-furosemide-paper/SKILL.md` — Table 1 numbers, blood vs plasma, cache rules, figure scripts, Windows commands
 - `docs/session_log_2026-09_chronic_oral.md` — full 25–26 Sep 2026 discussion log
+- `docs/manuscript_chronic_oral_change_list.md` — CHANGE vs KEEP for the chronic-oral Results text
+
 
 
 ## Figure 3 — toxin bars, Healthy vs CKD-5

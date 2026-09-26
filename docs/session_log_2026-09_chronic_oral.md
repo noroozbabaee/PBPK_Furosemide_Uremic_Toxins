@@ -146,6 +146,9 @@ Successful Windows bar run (26 Sep 2026): all three NPZs had **IS_base = 19.712 
 Share `results/chronic_oral_pct_bars.pdf` and `results/chronic_oral_pct_bars.txt`.
 
 
+Change vs keep for the Results paragraph:
+`docs/manuscript_chronic_oral_change_list.md`.
+
 ---
 
 ## 9. What not to do
