@@ -59,6 +59,20 @@ def _set_times_new_roman() -> None:
         }
     )
 
+
+def _save_fig(fig, path: str, dpi: int = 300) -> None:
+    """Crop the PDF/PNG to the ink (axes + labels + legend), small pad only."""
+    fig.set_facecolor("white")
+    fig.savefig(
+        path,
+        dpi=dpi,
+        bbox_inches="tight",
+        pad_inches=0.04,
+        facecolor="white",
+        edgecolor="none",
+        transparent=False,
+    )
+
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PARENT = os.path.abspath(os.path.join(_THIS_DIR, ".."))
 _ROOT = os.path.abspath(os.path.join(_PARENT, "..")) if os.path.basename(_PARENT) == "publication_code" else _PARENT
@@ -148,12 +162,12 @@ def plot(runs) -> plt.Figure:
         2,
         6,
         figure=fig,
-        hspace=0.62,
-        wspace=1.15,
-        left=0.08,
-        right=0.985,
-        top=0.95,
-        bottom=0.16,
+        hspace=0.50,
+        wspace=0.72,
+        left=0.06,
+        right=0.995,
+        top=0.98,
+        bottom=0.10,
     )
     axA = fig.add_subplot(gs[0, 0:2])
     axB = fig.add_subplot(gs[0, 2:4])
@@ -233,7 +247,8 @@ def plot(runs) -> plt.Figure:
         ncol=4,
         frameon=False,
         fontsize=11,
-        bbox_to_anchor=(0.5, 0.005),
+        bbox_to_anchor=(0.5, 0.0),
+        borderaxespad=0.4,
         columnspacing=1.8,
         handlelength=2.6,
         prop={"family": "serif", "size": 11},
@@ -254,7 +269,7 @@ def main() -> None:
     for folder in (_RESULTS, _PUB_FIG):
         for ext in ("png", "pdf"):
             p = os.path.join(folder, f"{stem}.{ext}")
-            fig.savefig(p, dpi=300, bbox_inches="tight")
+            _save_fig(fig, p)
             print(f"  Saved {p}", flush=True)
     plt.close(fig)
 

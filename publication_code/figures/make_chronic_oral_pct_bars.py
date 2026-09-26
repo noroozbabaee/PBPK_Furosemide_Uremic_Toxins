@@ -80,6 +80,20 @@ def _set_times_new_roman() -> None:
     )
 
 
+def _save_fig(fig, path: str, dpi: int = 300) -> None:
+    """Crop the PDF/PNG to the ink (axes + labels + legend), small pad only."""
+    fig.set_facecolor("white")
+    fig.savefig(
+        path,
+        dpi=dpi,
+        bbox_inches="tight",
+        pad_inches=0.04,
+        facecolor="white",
+        edgecolor="none",
+        transparent=False,
+    )
+
+
 XTICKS = ("TID 120 mg/day", "QD 240 mg/day", "TID 240 mg/day")
 BAR_COLORS = ("0.12", "0.38", "0.62")  # Total, Bound, Unbound
 BAR_LABELS = ("Total", "Bound", "Unbound")
@@ -155,16 +169,16 @@ def plot_pct_bars(rows: list[dict]) -> plt.Figure:
     pcs_pct = [r["pct_pCS"] for r in rows]
     ha_pct = [r["pct_HA"] for r in rows]
 
-    fig = plt.figure(figsize=(14.2, 5.4))
+    fig = plt.figure(figsize=(14.2, 5.0))
     gs = gridspec.GridSpec(
         1,
         3,
         figure=fig,
-        wspace=0.42,
-        left=0.07,
-        right=0.99,
-        top=0.92,
-        bottom=0.28,
+        wspace=0.38,
+        left=0.06,
+        right=0.995,
+        top=0.96,
+        bottom=0.16,
     )
     axA = fig.add_subplot(gs[0, 0])
     axB = fig.add_subplot(gs[0, 1])
@@ -213,7 +227,8 @@ def plot_pct_bars(rows: list[dict]) -> plt.Figure:
         loc="lower center",
         ncol=5,
         frameon=False,
-        bbox_to_anchor=(0.5, 0.01),
+        bbox_to_anchor=(0.5, 0.0),
+        borderaxespad=0.3,
         columnspacing=1.4,
         handlelength=2.2,
         prop={"family": "serif", "size": 11},
@@ -231,7 +246,7 @@ def main() -> None:
     for folder in (_RESULTS, _PUB_FIG):
         for ext in ("png", "pdf"):
             p = os.path.join(folder, f"{stem}.{ext}")
-            fig.savefig(p, dpi=300, bbox_inches="tight", facecolor="white")
+            _save_fig(fig, p)
             print(f"  Saved {p}", flush=True)
     plt.close(fig)
 
