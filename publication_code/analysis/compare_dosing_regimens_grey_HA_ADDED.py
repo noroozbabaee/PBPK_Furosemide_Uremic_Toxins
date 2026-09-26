@@ -194,6 +194,16 @@ def _find_cache(dose: float, n_doses: int) -> str:
     )
 
 
+def _last_day_peak(t, y):
+    t = np.asarray(t, dtype=float)
+    y = np.asarray(y, dtype=float)
+    t0 = (N_DAYS - 1) * TAU_H
+    m = t >= t0
+    if m.sum() < 3:
+        raise ValueError("last-day window too short for Cmax")
+    return float(np.max(y[m])), float(np.min(y[m]))
+
+
 def _last_day_avg(t, y):
     t = np.asarray(t, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -271,6 +281,10 @@ def load_regimen(name: str, dose: float, n_doses: int) -> dict:
     HA_avg, _, _ = _last_day_avg(t, HA)
     pCS_avg, _, _ = _last_day_avg(t, pCS)
     drg_avg, _, _ = _last_day_avg(t, drg)
+    IS_max, IS_min = _last_day_peak(t, IS)
+    HA_max, HA_min = _last_day_peak(t, HA)
+    pCS_max, pCS_min = _last_day_peak(t, pCS)
+    drg_max, drg_min = _last_day_peak(t, drg)
 
     HA_base = _f(cache, "HA_base")
     pCS_base = _f(cache, "pCS_base")
@@ -295,6 +309,14 @@ def load_regimen(name: str, dose: float, n_doses: int) -> dict:
         pct_IS=(IS_avg - IS_base) / IS_base * 100.0,
         pct_HA=(HA_avg - float(HA_base)) / max(float(HA_base), 1e-9) * 100.0,
         pct_pCS=(pCS_avg - float(pCS_base)) / max(float(pCS_base), 1e-9) * 100.0,
+        IS_max=IS_max,
+        IS_min=IS_min,
+        HA_max=HA_max,
+        HA_min=HA_min,
+        pCS_max=pCS_max,
+        pCS_min=pCS_min,
+        drg_max=drg_max,
+        drg_min=drg_min,
         t=t,
         IS=IS,
         HA=HA,
@@ -374,6 +396,31 @@ def main() -> None:
         print(
             f"{r['name']:<14} {r['pct_IS']:>+7.1f}% {r['pct_HA']:>+7.1f}% "
             f"{r['pct_pCS']:>+7.1f}% {r['drg_avg']:9.3f}  {r['IS_base']:.3f}"
+        )
+    print("=" * 65)
+    print("Last 24 h peaks (ODE blood mg/L). Plasma = blood / BP.")
+    print("BP: IS 0.70  HA 0.84  pCS 0.55  furosemide 0.82")
+    print(
+        f"{'Regimen':<14} {'IS Cmax':>8} {'HA Cmax':>8} {'pCS Cmax':>8} "
+        f"{'furo Cmax':>10} {'furo Cavg':>10}"
+    )
+    for r in rows:
+        print(
+            f"{r['name']:<14} {r['IS_max']:8.3f} {r['HA_max']:8.3f} "
+            f"{r['pCS_max']:8.3f} {r['drg_max']:10.3f} {r['drg_avg']:10.3f}"
+        )
+    by = {r["name"]: r for r in rows}
+    if "QD_240mg" in by and "TID_240mg" in by:
+        q, t = by["QD_240mg"], by["TID_240mg"]
+        print("-" * 65)
+        print("DB check (same 240 mg/day, last 24 h blood Cmax):")
+        for key, lab in (("IS_max", "IS"), ("HA_max", "HA"), ("pCS_max", "pCS")):
+            qd, tid = q[key], t[key]
+            flag = "QD peak > TID" if qd > tid + 1e-9 else "QD peak <= TID"
+            print(f"  {lab}: QD {qd:.3f}  TID {tid:.3f}  → {flag}")
+        print(
+            f"  Furosemide: QD Cmax {q['drg_max']:.2f}  TID Cmax {t['drg_max']:.2f}  "
+            f"QD Cavg {q['drg_avg']:.2f}  TID Cavg {t['drg_avg']:.2f}"
         )
     print("=" * 65)
     print("Plotting regimens:", [r["name"] for r in rows])
