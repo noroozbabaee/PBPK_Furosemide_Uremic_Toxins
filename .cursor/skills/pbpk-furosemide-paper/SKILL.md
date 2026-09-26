@@ -89,7 +89,7 @@ Gitignores `results/*`. **Keep local NPZs**; they are not on GitHub.
 
 | Figure | Script (repo root or `publication_code/` twin) |
 |---|---|
-| Five-panel A–E (IS, HA, pCS 30 d; furo days 27–30; furo last 24 h) | `figures/make_chronic_oral_five_panel.py` |
+| Five-panel A–E (IS, pCS, HA 30 d; furo days 27–30; furo last 24 h) | `figures/make_chronic_oral_five_panel.py` |
 | PPT panel E only | `figures/make_ppt_furosemide_24h.py` |
 | %Δ bars A–C (IS, pCS, HA; Total/Bound/Unbound; Costes CI) | `figures/make_chronic_oral_pct_bars.py` |
 | Time-course 2×2 check of three doses | `analysis/compare_dosing_regimens_grey_HA_ADDED.py` |
@@ -190,7 +190,8 @@ The **published three-arm comparison** uses 40×3, 240×1, 80×3 with matching *
 
 ### `make_chronic_oral_five_panel.py`
 
-Log must include: skip warm-up; all four traces CKD-5 `IS_base ≈ 19.712`; first row **A. IS, B. HA, C. pCS**. Times New Roman, axis/legend 11 pt, panel letters 14 pt bold.
+Log must include: skip warm-up; all four traces CKD-5 `IS_base ≈ 19.712`; first row **A. IS, B. pCS, C. HA**. Times New Roman, axis/legend 11 pt, panel letters 14 pt bold.
+Caption: `docs/figure_caption_chronic_oral_five_panel.tex`.
 
 ---
 

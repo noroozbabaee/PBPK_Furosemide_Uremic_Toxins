@@ -277,8 +277,8 @@ def plot(runs) -> plt.Figure:
 
     top = (
         (axA, "IS_all", "IS plasma\nconcentration (mg/L)", "A. IS"),
-        (axB, "HA_all", "HA plasma\nconcentration (mg/L)", "B. HA"),
-        (axC, "pCS_all", "p-CS plasma\nconcentration (mg/L)", "C. pCS"),
+        (axB, "pCS_all", "p-CS plasma\nconcentration (mg/L)", "B. pCS"),
+        (axC, "HA_all", "HA plasma\nconcentration (mg/L)", "C. HA"),
     )
     for ax, key, ylab, letter in top:
         for label, data, ls, c, lw in runs:

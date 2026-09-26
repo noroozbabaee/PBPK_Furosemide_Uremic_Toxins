@@ -168,4 +168,4 @@ Change vs keep for the Results paragraph:
 
 Full sequence that worked: `cd` repo → `git pull origin cursor/chronic-oral-caches-ki035-ee8a` → `compare_dosing...` → `check_cache_t0_pcs.py` → `make_chronic_oral_five_panel.py` (caches present, skip warm-up, all `IS_base=19.712`).
 
-Printed %Δ and blood Cmax/Cavg: see `.cursor/skills/pbpk-furosemide-paper/SKILL.md` (Windows run log). Five-panel first row: A IS, B HA, C pCS.
+Printed %Δ and blood Cmax/Cavg: see `.cursor/skills/pbpk-furosemide-paper/SKILL.md` (Windows run log). Five-panel first row: A IS, B pCS, C HA. Caption: `docs/figure_caption_chronic_oral_five_panel.tex`.
