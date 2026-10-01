@@ -90,6 +90,7 @@ Gitignores `results/*`. **Keep local NPZs**; they are not on GitHub.
 | Figure | Script (repo root or `publication_code/` twin) |
 |---|---|
 | Five-panel A–E | `figures/make_chronic_oral_five_panel.py` |
+| Fig 7 analytical $K_i\times V_{\max}$ (A IS, B HA, C pCS; star; **no dashed lines**) | `figures/make_figure7_ki_vmax_heatmap.py`. Caption: `docs/figure_caption_figure7_ki_vmax.tex`. Output `heatmap_ki_vmax_analytical.pdf`. **Not** `heatmap_ki_vmax_from_cache.py` (IV) |
 | Ki×Vmax IV supplementary (not Fig 7) | `figures/heatmap_ki_vmax_from_cache.py` + `analysis/heatmap_ki_vmax_engine.py` |
 | Fig 8 analytical $f_u\times f_u$ (A IS, B HA, C pCS; star; **no dashed lines**) | `figures/make_figure8_fu_heatmap.py`. Caption: `docs/figure_caption_figure8_fu_heatmap.tex`. Y-axis = toxin $f_{u,p}$ after multiplication |
 | Corner ODE vs analytical | `analysis/heatmap_validate_corners.py` |
@@ -124,6 +125,16 @@ HA %Δ bars: large **“No clinical HA data”**. Costes-Albrespic 2025: IS +31.
 cd /d C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
 git pull origin cursor/chronic-oral-caches-ki035-ee8a
 ```
+
+**Figure 7** (analytical \(K_i\times V_{\max}\), same layout as Fig 8, no lines):
+
+```bat
+cd /d C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
+pbpk_env\Scripts\python.exe figures\make_figure7_ki_vmax_heatmap.py
+```
+
+Outputs: `results\heatmap_ki_vmax_analytical.pdf` and `publication_code\Figures\heatmap_ki_vmax_analytical.pdf`.
+Do **not** run `heatmap_ki_vmax_from_cache.py` for Fig 7 (that is IV 24 h).
 
 **Figure 8** (analytical \(f_u\times f_u\), flux-decomposition style, no grid/contours):
 

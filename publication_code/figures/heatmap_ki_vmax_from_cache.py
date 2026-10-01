@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Supplementary Ki × Vmax ODE figure — single IV dose, not manuscript Fig 7.
 
-Manuscript Fig 7 is the analytical chronic oral map
-(heatmap_ki_vmax_analytical.pdf), which is not in this git tree.
+Manuscript Fig 7 is `figures/make_figure7_ki_vmax_heatmap.py`
+(`heatmap_ki_vmax_analytical.pdf`). This IV plot is supplementary only.
 
 This plot uses heatmap_ki_vmax_engine.compute_heatmaps (default
 SCENARIO=single_iv): 24 h no-drug vs 24 h IV 120 mg / 2 h. Colour is

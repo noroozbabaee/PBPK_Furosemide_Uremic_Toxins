@@ -4,14 +4,17 @@
 # Manuscript Fig 8: analytical fu × fu (filenames cited as
 #   heatmap_ki_vmax_analytical.pdf and heatmap_fu_analytical_3panels.pdf).
 #
-# Those two PDF *builders* are NOT in this git tree. The inhibition math is
-# reconstructed in analysis/heatmap_analytical_formulas.py (same as
-# dose_response_tid_vs_qd.analytical_ss). Css_furo = F·Dose_day/(CL_FURO·τ).
+# Those two PDF builders are in git:
+#   Fig 7  figures/make_figure7_ki_vmax_heatmap.py → heatmap_ki_vmax_analytical.pdf
+#   Fig 8  figures/make_figure8_fu_heatmap.py     → heatmap_fu_analytical_3panels.pdf
+# Math: analysis/heatmap_analytical_formulas.py
+# Css_furo default 1.68 mg/L plasma (ODE last-cycle TID 80×3) if no NPZ.
 
 ## In the repo
 
 | File | What it is | Dosing | Toxins | Fig 7? |
 |---|---|---|---|---|
+| `figures/make_figure7_ki_vmax_heatmap.py` | **Manuscript Fig 7**: analytical Ki × Vmax, 3 panels, star, no lines | chronic SS formula, TID 80×3 | IS, HA, pCS | **Yes** |
 | `analysis/heatmap_ki_vmax_sensitivity_ode.py` | Legacy IV ODE | **IV 120 mg / 2 h**, 24 h | IS, pCS | **No** |
 | `analysis/heatmap_ki_vmax_engine.py` | Collaborator engine: row-wise warm-up+no-drug, `TOX*_PASS` fingerprint, restore scales | `single_iv` or `chronic_oral` TID 80×3 | IS, HA, pCS | Only if `HEATMAP_SCENARIO=chronic_oral` |
 | `figures/heatmap_ki_vmax_from_cache.py` | Supplementary IV 3-panel (Times, 6.27 in, no +30%) | IV | IS, pCS, HA | **No** |

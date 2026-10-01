@@ -5,8 +5,8 @@ heatmap_ki_vmax_engine.py
 Single source of truth for the Ki × Vmax sensitivity grid.
 Replaces run_ckd_simulation() / compute_heatmap() in heatmap_ki_vmax_fixed_v4.py.
 
-This is NOT manuscript Fig 7 by default. Fig 7 is the analytical chronic map
-(heatmap_ki_vmax_analytical.pdf), which is not in this git tree.
+This is NOT manuscript Fig 7 by default. Fig 7 is
+figures/make_figure7_ki_vmax_heatmap.py (heatmap_ki_vmax_analytical.pdf).
 
 What changed vs v4 (same IV physics, same outcome definition):
   1. ROW-WISE: the warm-up and the no-drug reference do not depend on Ki
