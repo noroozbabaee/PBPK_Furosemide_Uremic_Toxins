@@ -61,6 +61,10 @@ import constants as K
 import physiology as phys
 import compounds as C
 import compound_parameters as CP
+from toxin_display_order import (
+    TOXIN_DISPLAY_ORDER,
+    assert_toxin_display_order,
+)
 
 # Do not import an external "plotting" helper — it silently changes fonts.
 
@@ -375,6 +379,7 @@ def compute_flux_contributions_percent(flux: Dict, species=("IS", "HA", "pCS", "
 # Plotting
 # ---------------------------------------------------------------------
 def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
+    assert_toxin_display_order(species)
     _set_times()
     scenarios = list(flux_by_scenario.keys())
     panels = [
@@ -514,7 +519,7 @@ def main() -> Dict[str, object]:
     sol_H_ss, sol_C_ss = reach_steady_state()
     solutions, meta, flux_data_all = run_main_scenarios(sol_H_ss, sol_C_ss)
 
-    fig_tox = plot_flux_panels(flux_data_all, species=("IS", "HA", "pCS"))
+    fig_tox = plot_flux_panels(flux_data_all, species=TOXIN_DISPLAY_ORDER)
     _save(fig_tox, outdir, "09_flux_decomposition_PBUTs_greyscale")
     fig4 = os.path.join(_PUB_FIG, "Fig4.pdf")
     fig_tox.savefig(
@@ -526,7 +531,8 @@ def main() -> Dict[str, object]:
     fig_drg = plot_flux_panels(flux_data_all, species=("DRUG",))
     _save(fig_drg, outdir, "10_flux_decomposition_furosemide_greyscale")
 
-    fig_all = plot_flux_panels(flux_data_all, species=("DRUG", "IS", "HA", "pCS"))
+    fig_all = plot_flux_panels(
+        flux_data_all, species=("DRUG",) + TOXIN_DISPLAY_ORDER)
     _save(fig_all, outdir, "11_flux_decomposition_all_greyscale")
 
     from flux_export import export_flux_results

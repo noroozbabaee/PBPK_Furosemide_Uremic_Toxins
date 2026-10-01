@@ -69,7 +69,8 @@ Those `09_` names in a **new** timestamp folder are OK; the **old** committed
 | C | Basolateral OAT1 uptake |
 | D | Apical secretion |
 
-Species on Fig 4: **IS, HA, pCS** (not furosemide). Legend: Healthy / CKD-5 ×
+Species on Fig 4 x-axis, left to right: **IS, HA, pCS** (pCS last; not furosemide).
+Do **not** swap to IS, pCS, HA on this figure. Legend: Healthy / CKD-5 ×
 No Furosemide / With Furosemide.
 
 CKD Vmax comes only from `compound_parameters.py` `_CKD_SCALES` (drug/tox

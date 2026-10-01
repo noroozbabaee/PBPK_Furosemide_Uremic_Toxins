@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from typing import Dict, Optional
 
-SPECIES = ("IS", "pCS", "HA", "DRUG")
+SPECIES = ("IS", "HA", "pCS", "DRUG")
 DISPLAY = {"IS": "IS", "pCS": "pCS", "HA": "HA", "DRUG": "Furosemide"}
 SCENARIO_ORDER = (
     "Healthy No Furosemide",

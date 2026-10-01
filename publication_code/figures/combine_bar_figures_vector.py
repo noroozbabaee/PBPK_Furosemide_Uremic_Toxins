@@ -52,6 +52,11 @@ import plot_healthy_lit_comparison_3scenarios as _healthy_mod  # noqa: E402
 import plot_ckd_lit_comparison_3scenarios as _ckd_mod  # noqa: E402
 from state_vector import IDX  # noqa: E402
 import constants as K  # noqa: E402
+from toxin_display_order import (  # noqa: E402
+    TOXIN_DISPLAY_ORDER,
+    toxin_states_for_display,
+    toxin_ae_for_display,
+)
 
 K.VERBOSE = False
 
@@ -136,9 +141,9 @@ def main() -> None:
         scenario_names_ckd[2]: "#1a1a1a",
     }
 
-    toxins = ["IS", "HA", "pCS"]
-    toxin_states = ["C_tox1_cen", "C_tox2_cen", "C_tox3_cen"]
-    ae_states = ["Ae_t1", "Ae_t2", "Ae_t3"]
+    toxins = list(TOXIN_DISPLAY_ORDER)
+    toxin_states = toxin_states_for_display()
+    ae_states = toxin_ae_for_display()
     window = (0.0, 12.0)
 
     fig = plt.figure(figsize=(14, 10))
