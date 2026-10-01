@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-heatmap_ki_vmax_fixed_v4.py
-============================
+heatmap_ki_vmax_sensitivity_ode.py (legacy IV)
+==============================================
+Not manuscript Fig 7. Prefer heatmap_ki_vmax_engine.py (pKa fingerprint,
+shared warm-up, HA, restore Vmax). Delete heatmap_cache_correct.pkl.
+
 Final clean version — all issues resolved, 15×12 grid, 24h simulation.
 
 CHANGES vs v3:
@@ -126,14 +129,18 @@ def _force_ki(ki_value: float) -> None:
 
 
 def _set_vmax_scale(vmax_scale: float) -> None:
-    """Override CKD-5 basolateral Vmax scale for IS and pCS."""
+    """Override CKD-5 basolateral Vmax scale (fraction of healthy) for IS, HA, pCS."""
     try:
         import compound_parameters as CP
-        CP._CKD_SCALES["per_compound"]["IS"]["baso"]  = vmax_scale
-        CP._CKD_SCALES["per_compound"]["pCS"]["baso"] = vmax_scale
+        for tox in ("IS", "HA", "pCS"):
+            CP._CKD_SCALES["per_compound"][tox]["baso"] = vmax_scale
         CP.CKD_ADJUSTMENTS = CP._create_ckd_adjustments_dynamic(CP._CKD_SCALES)
     except Exception as e:
         print(f"    [warn] _set_vmax_scale: {e}")
+
+
+def _set_vmax(vmax_scale: float) -> None:
+    _set_vmax_scale(vmax_scale)
 
 
 # ── Single simulation ─────────────────────────────────────────────────────────
@@ -146,7 +153,7 @@ def run_ckd_simulation(ki_value: float, vmax_scale: float, toxin: str,
       3. 24h with-drug run from SS → inhibited Css
       4. %Δ = (Css_drug - Css_no) / Css_no × 100
 
-    Css extracted from C_tox*_cen [mg/L plasma] — NO BP division.
+    Css extracted from C_tox*_cen [mg/L total blood]. BP cancels in %Δ.
     """
     result = {
         "ki": ki_value, "vmax_scale": vmax_scale, "toxin": toxin,
@@ -217,7 +224,7 @@ def run_ckd_simulation(ki_value: float, vmax_scale: float, toxin: str,
             result["error"] = "Drug run failed"; return result
 
         # ── Step 4: extract Css at t=SIM_HOURS ────────────────────────────
-        # C_tox*_cen is total PLASMA concentration [mg/L] — no BP division.
+        # C_tox*_cen is total BLOOD (mg/L). Plasma = blood/BP; %Δ unchanged.
         key_idx  = "C_tox1_cen" if toxin == "IS" else "C_tox3_cen"
         Css_no   = float(sol_no.y[IDX[key_idx],   -1])
         Css_drug = float(sol_drug.y[IDX[key_idx], -1])
@@ -359,19 +366,7 @@ def make_figure(IS_pct: np.ndarray, pCS_pct: np.ndarray,
         im = ax.pcolormesh(Ki_grid, Vmax_grid, pct_2d,
                            cmap=cmap, norm=norm, shading="auto")
 
-        # +30% clinical contour (Costes-Albrespic 2025)
-        if np.nanmax(pct_2d) >= 30.0:
-            try:
-                cs = ax.contour(Ki_grid, Vmax_grid, pct_2d,
-                                levels=[30.0],
-                                colors=["white"],
-                                linewidths=2.2, linestyles=["--"])
-                ax.clabel(cs, fmt="+30% (clinical)",
-                          fontsize=9, colors="white", inline=True)
-            except Exception:
-                pass
-
-        # +10% contour
+        # +10% guide only (no Costes contour on a single-dose map)
         if np.nanmax(pct_2d) >= 10.0:
             try:
                 cs10 = ax.contour(Ki_grid, Vmax_grid, pct_2d,
@@ -387,13 +382,10 @@ def make_figure(IS_pct: np.ndarray, pCS_pct: np.ndarray,
         ax.scatter([current_Ki], [current_scale],
                    s=250, marker="*",
                    color="white", edgecolors="black",
-                   linewidths=1.2, zorder=10,
-                   label=(f"Current model\n"
-                          f"$K_i$={current_Ki} mg/L, "
-                          f"scale={current_scale}"))
+                   linewidths=1.2, zorder=10)
 
         cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label(r"$\Delta C_{ss}$ vs no-drug CKD-5 (%)",
+        cbar.set_label(r"$\Delta C$ at 24 h vs no-drug CKD-5 (%)",
                        fontsize=11)
         cbar.ax.tick_params(labelsize=9)
 
@@ -409,22 +401,11 @@ def make_figure(IS_pct: np.ndarray, pCS_pct: np.ndarray,
             f"{toxin}   |   ODE CKD-5  |  "
             f"120 mg IV  |  t=0–{SIM_HOURS:.0f}h",
             fontsize=13, fontweight="bold", loc="left")
-        ax.legend(fontsize=9, loc="upper right",
-                  framealpha=0.90, edgecolor="#cccccc")
         ax.tick_params(labelsize=10)
         ax.xaxis.set_major_formatter(
             ticker.FuncFormatter(lambda x, _: f"{x:.2g}"))
 
-    fig.suptitle(
-        r"Sensitivity heatmap: $K_i$ × CKD-5 OAT1 $V_{max}$ scale"
-        r" $\rightarrow$ toxin plasma accumulation"
-        "\n"
-        f"Grid: {N_KI}×{N_VMAX}  |  "
-        f"120 mg IV furosemide  |  "
-        f"CKD-5  |  "
-        "White dashed = +30% (Costes-Albrespic 2025)",
-        fontsize=11, fontweight="bold", y=0.995,
-    )
+    # Caption belongs in LaTeX, not a figure suptitle.
 
     fig.text(
         0.5, 0.01,

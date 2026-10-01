@@ -207,8 +207,16 @@ def _run_one_cycle(ic: dict, day: int,
     t_off = day * TAU_H
     t_all = []; y_all = []
     ic_cur = copy.deepcopy(ic)
-    for k in ("C_ven", "C_peri", "Ae_drg", "C_bladder"):
-        if k in ic_cur: ic_cur[k] = 0.0
+    # Zero furosemide only on day 0. Later days must carry C_ven / C_peri
+    # across midnight (same rule as dose_response_tid_vs_qd.run_one_day_tid).
+    if day == 0:
+        for k in ("C_ven", "C_peri", "Ae_drg", "C_bladder"):
+            if k in ic_cur:
+                ic_cur[k] = 0.0
+    else:
+        for k in ("Ae_drg", "C_bladder"):
+            if k in ic_cur:
+                ic_cur[k] = 0.0
 
     # Absorption segments
     for (t0, t1, IR) in ORAL_SEGS:

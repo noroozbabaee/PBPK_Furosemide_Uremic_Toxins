@@ -89,7 +89,10 @@ Gitignores `results/*`. **Keep local NPZs**; they are not on GitHub.
 
 | Figure | Script (repo root or `publication_code/` twin) |
 |---|---|
-| Five-panel A–E (IS, pCS, HA 30 d; furo days 27–30; furo last 24 h) | `figures/make_chronic_oral_five_panel.py` |
+| Five-panel A–E | `figures/make_chronic_oral_five_panel.py` |
+| Ki×Vmax IV supplementary (not Fig 7) | `figures/heatmap_ki_vmax_from_cache.py` + `analysis/heatmap_ki_vmax_engine.py` |
+| Fig 7/8 analytical PDFs | **not in git**; math in `analysis/heatmap_analytical_formulas.py` |
+| Corner ODE vs analytical | `analysis/heatmap_validate_corners.py` |
 | PPT panel E only | `figures/make_ppt_furosemide_24h.py` |
 | %Δ bars A–C (IS, pCS, HA; Total/Bound/Unbound; Costes CI) | `figures/make_chronic_oral_pct_bars.py` |
 | Time-course 2×2 check of three doses | `analysis/compare_dosing_regimens_grey_HA_ADDED.py` |
@@ -204,6 +207,7 @@ Caption (bars): `docs/figure_caption_chronic_oral_pct_bars.tex`. Do **not** swap
 - **RM** — keep phenotype of caches consistent; table notes under the table (`threeparttable`).
 - **DB / Dian** — QD HA Cmax > TID HA Cmax; IS and pCS QD Cmax ≤ TID. Quote last-24 h peaks (plasma = blood/BP).
 - **LN** — all table Cmax and \(\overline{C}_{\mathrm{furo}}\) in **plasma**; old TID Cmax 3.7 and 7.1 were blood.
+- **Fig 7/8** — analytical chronic maps are **not** `heatmap_ki_vmax_from_cache.py` (IV ODE). See `docs/figure7_8_heatmap_map.md`. Vmax axis = fraction of **healthy** OAT1 \(V_{\max}\).
 
 Initiation protocol (no-drug SS vs with-drug 30 d vs IV PK extract):
 `docs/scenario_initiation_ckd5_chronic_oral.md`. Do not mix those three.
