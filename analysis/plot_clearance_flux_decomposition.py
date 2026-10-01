@@ -33,11 +33,22 @@ import datetime
 from typing import Dict, Tuple, Optional, Sequence
 
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
 
-# ── Path bootstrap ──────────────────────────────────────────────────────────
-# This script lives in analysis/. The core PBPK engine lives in ../src/.
+# Always the repo-root src/ (not publication_code/src), same as the five-panel.
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_SRC_DIR  = os.path.join(_THIS_DIR, "..", "src")
+_PARENT = os.path.abspath(os.path.join(_THIS_DIR, ".."))
+_ROOT = (
+    os.path.abspath(os.path.join(_PARENT, ".."))
+    if os.path.basename(_PARENT) == "publication_code"
+    else _PARENT
+)
+_SRC_DIR = os.path.join(_ROOT, "src")
+_RESULTS = os.path.join(_ROOT, "results")
+_PUB_FIG = os.path.join(_ROOT, "publication_code", "Figures")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 
@@ -45,26 +56,11 @@ from simulation import run_sim
 from scenario_manager import set_scenario
 from state_vector import IDX
 import constants as K
-
-# "plotting" is an OPTIONAL internal styling/saving helper module that is
-# not part of this open-science package (it provided house-style figure
-# formatting in the original lab environment). It is not required — every
-# call site below already checks hasattr(plotting, ...) before using it,
-# and falls back to plain matplotlib fig.savefig() if unavailable. We make
-# the import itself optional here so the script runs standalone.
-try:
-    import plotting
-except ImportError:
-    class _NoPlotting:
-        """Stand-in so hasattr(plotting, 'x') checks below resolve to False
-        and every call site falls back to plain matplotlib behavior."""
-        pass
-    plotting = _NoPlotting()
-
 import physiology as phys
-
 import compounds as C
 import compound_parameters as CP
+
+# Do not import an external "plotting" helper — it silently changes fonts.
 
 # ---------------------------------------------------------------------
 # Config
@@ -84,11 +80,17 @@ TIME_WINDOW     = (6.0, 12.0)
 if hasattr(K, "set_ckd_scale"):
     K.set_ckd_scale(CKD_SCALE)
 
+BP_TOX = {
+    "IS": float(CP.TOX1_BASE.get("BP", 0.70)),
+    "HA": float(CP.TOX2_BASE.get("BP", 0.84)),
+    "pCS": float(CP.TOX3_BASE.get("BP", 0.55)),
+}
+# C0 in this repo is the healthy ODE-state guess (blood C_tox*_cen), not Table 1 plasma.
 BASELINE_IC = {
     "C_ven": 0.0,
-    "C_tox1_cen": 0.5,     # IS healthy SS target
-    "C_tox2_cen": 5.0,     # HA healthy SS target  (was 3.0 — corrected)
-    "C_tox3_cen": 0.7,     # pCS healthy SS target (was 1.84 — corrected)
+    "C_tox1_cen": float(CP.TOX1_BASE.get("C0", 0.5)),
+    "C_tox2_cen": float(CP.TOX2_BASE.get("C0", 3.0)),
+    "C_tox3_cen": float(CP.TOX3_BASE.get("C0", 0.7)),
     "C_bladder": 0.0,
     "Ae_drg": 0.0,
     "Ae_t1": 0.0,
@@ -129,25 +131,42 @@ def _timestamp_dir(base: str) -> str:
     return path
 
 
+def _set_times() -> None:
+    available = {f.name for f in font_manager.fontManager.ttflist}
+    chosen = next(
+        (n for n in ("Times New Roman", "TimesNewRoman", "Nimbus Roman",
+                     "Liberation Serif", "Times") if n in available),
+        "serif",
+    )
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": [chosen, "Times New Roman", "Liberation Serif", "DejaVu Serif"],
+        "mathtext.fontset": "stix",
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": False,
+        "axes.titlesize": 11,
+        "axes.labelsize": 11,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+        "legend.fontsize": 10,
+        "axes.linewidth": 0.8,
+    })
+
+
 def _save(fig, outdir: str, name: str, exts=("png", "pdf"), dpi: int = 300) -> None:
     os.makedirs(outdir, exist_ok=True)
-    base = os.path.join(outdir, name)
-    if hasattr(plotting, "save_figure"):
-        try:
-            plotting.save_figure(fig, base, formats=list(exts), dpi=dpi)
-            return
-        except Exception as e:
-            print(f"(plotting.save_figure failed for '{name}': {e})")
-    for ext in exts:
-        path = f"{base}.{ext}"
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
-        print(f"  Saved {path}")
-        if name == "09_flux_decomposition_PBUTs_greyscale":
-            pub_dir = os.path.join(_THIS_DIR, "..", "publication_code", "Figures")
-            os.makedirs(pub_dir, exist_ok=True)
-            pub = os.path.join(pub_dir, f"{name}.{ext}")
-            fig.savefig(pub, dpi=dpi, bbox_inches="tight")
-            print(f"  Saved {pub}")
+    os.makedirs(_PUB_FIG, exist_ok=True)
+    for folder in (outdir, _PUB_FIG):
+        for ext in exts:
+            path = os.path.join(folder, f"{name}.{ext}")
+            fig.savefig(
+                path, dpi=dpi, bbox_inches="tight", pad_inches=0.04,
+                facecolor="white", edgecolor="none",
+            )
+            print(f"  Saved {path}")
 
 
 def _steady_state_check(sol, label: str, rel_cv_thresh: float = 0.01) -> bool:
@@ -263,9 +282,10 @@ def compute_fluxes_for_scenario_drug(
         "sign_convention":     {"basolateral_passive": "+ = vascular→cell"},
     }
 
-    Cpl = {"IS": val("C_tox1_cen"), "HA": val("C_tox2_cen"), "pCS": val("C_tox3_cen")}
+    C_blood = {"IS": val("C_tox1_cen"), "HA": val("C_tox2_cen"), "pCS": val("C_tox3_cen")}
     for sp in ["IS", "HA", "pCS"]:
-        flux["filtration"][sp] = Q_GFR * fu_over_BP(TOX[sp]) * Cpl[sp]
+        # C_tox*_cen is total blood; Cu_plasma = C_blood × fu_p / BP
+        flux["filtration"][sp] = Q_GFR * fu_over_BP(TOX[sp]) * C_blood[sp]
 
     PASS = {
         "IS":  getattr(C, "TOX1_PASS", None),
@@ -353,27 +373,16 @@ def compute_flux_contributions_percent(flux: Dict, species=("IS", "HA", "pCS", "
 # Plotting
 # ---------------------------------------------------------------------
 def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
-    import matplotlib.pyplot as plt
-    if hasattr(plotting, "setup_professional_style"):
-        try: plotting.setup_professional_style()
-        except Exception: pass
-
-    plt.rcParams.update({
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        "axes.grid": False,
-        "axes.titlesize": 16,
-    })
-
+    _set_times()
     scenarios = list(flux_by_scenario.keys())
-    # Process names live in the LaTeX caption; panels are lettered only.
     panels = [
         ("filtration",          "A"),
         ("basolateral_passive", "B"),
         ("basolateral_uptake",  "C"),
         ("apical_secretion",    "D"),
     ]
-    fig, axes = plt.subplots(2, 2, figsize=(12, 7.6))
+    fig, axes = plt.subplots(2, 2, figsize=(6.27, 5.4))
+    fig.patch.set_facecolor("white")
     axes = axes.ravel()
     xtick_labels = [DISPLAY_NAME.get(sp, sp) for sp in species]
     x = np.arange(len(species), dtype=float)
@@ -384,11 +393,11 @@ def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
     for ax, (key, letter) in zip(axes, panels):
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
+        ax.grid(False)
         ax.set_xticks(x)
         ax.set_xticklabels(xtick_labels)
         ax.set_xlabel("")
         if key == "basolateral_passive":
-            ax.axhline(0.0, color="black", linewidth=0.8, alpha=0.7)
             ax.set_yscale("symlog", linthresh=1e-4)
             ax.set_ylabel("Flux (mg/h)\n(symmetric log scale)")
         else:
@@ -396,11 +405,11 @@ def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
         ax.text(
             0.02, 0.95, letter,
             transform=ax.transAxes,
-            fontsize=16, fontweight="bold", va="top", ha="left",
+            fontsize=14, fontweight="bold", va="top", ha="left",
         )
         handles = []
         for j, sc in enumerate(scenarios):
-            vals  = [float(flux_by_scenario[sc][key].get(sp, 0.0)) for sp in species]
+            vals = [float(flux_by_scenario[sc][key].get(sp, 0.0)) for sp in species]
             rects = ax.bar(
                 left0 + j * width, vals, width, label=sc,
                 color=SCENARIO_COLORS.get(sc, "#999999"),
@@ -412,25 +421,40 @@ def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
             handles_for_legend = handles
 
     if handles_for_legend is not None:
-        fig.legend(handles_for_legend, scenarios,
-                   loc="lower center", ncol=min(4, len(scenarios)),
-                   frameon=False, fontsize=12,
-                   bbox_to_anchor=(0.5, -0.02),
-                   columnspacing=2.2, handlelength=2.6)
-    fig.tight_layout(rect=[0, 0.08, 1, 1])
+        fig.legend(
+            handles_for_legend, scenarios,
+            loc="lower center", ncol=min(4, len(scenarios)),
+            frameon=False, fontsize=9,
+            bbox_to_anchor=(0.5, -0.02),
+            columnspacing=1.4, handlelength=1.8,
+        )
+    fig.tight_layout(rect=[0, 0.10, 1, 1])
     if outpath:
-        fig.savefig(outpath, dpi=300, bbox_inches="tight")
+        fig.savefig(outpath, dpi=300, bbox_inches="tight", pad_inches=0.04)
     return fig
 
 
 # ---------------------------------------------------------------------
 # Steady-state and scenario runs
 # ---------------------------------------------------------------------
+def _print_ss(sol, label: str) -> None:
+    b_is = float(sol.y[IDX["C_tox1_cen"]][-1])
+    b_ha = float(sol.y[IDX["C_tox2_cen"]][-1])
+    b_pcs = float(sol.y[IDX["C_tox3_cen"]][-1])
+    print(f"  {label} blood  IS={b_is:.3f}  HA={b_ha:.3f}  pCS={b_pcs:.3f} mg/L")
+    print(f"  {label} plasma IS={b_is/BP_TOX['IS']:.3f}  "
+          f"HA={b_ha/BP_TOX['HA']:.3f}  pCS={b_pcs/BP_TOX['pCS']:.3f} mg/L")
+    if "CKD" in label and b_is < 8.0:
+        raise RuntimeError(
+            f"{label} IS_blood={b_is:.3f} looks healthy (~0.54), not CKD-5 (~19.7). "
+            "Aborting — check src/compound_parameters.py CKD scales."
+        )
+
+
 def reach_steady_state():
     print("\n=== Steady-state (NO DRUG) ===")
-    if hasattr(plotting, "setup_professional_style"):
-        try: plotting.setup_professional_style()
-        except Exception: pass
+    print(f"  Using src: {_SRC_DIR}")
+    K.VERBOSE = False
     if hasattr(C, "initialize_compounds"):
         C.initialize_compounds("healthy")
 
@@ -446,14 +470,9 @@ def reach_steady_state():
 
     _steady_state_check(sol_H_ss, "Healthy", rel_cv_thresh=0.01)
     _steady_state_check(sol_C_ss, "CKD-5",  rel_cv_thresh=0.01)
-
-    print("\nSS (final plasma, mg/L):")
-    print(f"  Healthy → IS={sol_H_ss.y[IDX['C_tox1_cen']][-1]:.3f}  "
-          f"HA={sol_H_ss.y[IDX['C_tox2_cen']][-1]:.3f}  "
-          f"pCS={sol_H_ss.y[IDX['C_tox3_cen']][-1]:.3f}")
-    print(f"  CKD-5  → IS={sol_C_ss.y[IDX['C_tox1_cen']][-1]:.3f}  "
-          f"HA={sol_C_ss.y[IDX['C_tox2_cen']][-1]:.3f}  "
-          f"pCS={sol_C_ss.y[IDX['C_tox3_cen']][-1]:.3f}")
+    print("\nSS (C_tox*_cen is total blood; plasma = blood/BP):")
+    _print_ss(sol_H_ss, "Healthy")
+    _print_ss(sol_C_ss, "CKD-5")
     return sol_H_ss, sol_C_ss
 
 
@@ -481,11 +500,8 @@ def run_main_scenarios(sol_H_ss, sol_C_ss):
 # ---------------------------------------------------------------------
 def main() -> Dict[str, object]:
     K.VERBOSE = False
-    if hasattr(plotting, "setup_professional_style"):
-        try: plotting.setup_professional_style()
-        except Exception: pass
-
-    outdir = _timestamp_dir(os.path.join(_THIS_DIR, "..", "results", "flux_decomposition"))
+    _set_times()
+    outdir = _timestamp_dir(os.path.join(_RESULTS, "flux_decomposition"))
 
     sol_H_ss, sol_C_ss = reach_steady_state()
     solutions, meta    = run_main_scenarios(sol_H_ss, sol_C_ss)
