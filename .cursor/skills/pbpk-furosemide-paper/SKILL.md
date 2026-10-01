@@ -91,7 +91,7 @@ Gitignores `results/*`. **Keep local NPZs**; they are not on GitHub.
 |---|---|
 | Five-panel A–E | `figures/make_chronic_oral_five_panel.py` |
 | Ki×Vmax IV supplementary (not Fig 7) | `figures/heatmap_ki_vmax_from_cache.py` + `analysis/heatmap_ki_vmax_engine.py` |
-| Fig 7/8 analytical PDFs | **not in git**; math in `analysis/heatmap_analytical_formulas.py` |
+| Fig 8 analytical $f_u\times f_u$ (IS, pCS, HA; no contours) | `figures/make_figure8_fu_heatmap.py` |
 | Corner ODE vs analytical | `analysis/heatmap_validate_corners.py` |
 | PPT panel E only | `figures/make_ppt_furosemide_24h.py` |
 | %Δ bars A–C (IS, pCS, HA; Total/Bound/Unbound; Costes CI) | `figures/make_chronic_oral_pct_bars.py` |
@@ -124,6 +124,15 @@ HA %Δ bars: large **“No clinical HA data”**. Costes-Albrespic 2025: IS +31.
 cd /d C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
 git pull origin cursor/chronic-oral-caches-ki035-ee8a
 ```
+
+**Figure 8** (analytical \(f_u\times f_u\), flux-decomposition style, no grid/contours):
+
+```bat
+cd /d C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
+pbpk_env\Scripts\python.exe figures\make_figure8_fu_heatmap.py
+```
+
+Outputs: `results\heatmap_fu_analytical_3panels.pdf` and `publication_code\Figures\heatmap_fu_analytical_3panels.pdf`. Do **not** run `heatmap_fu_sensitivity_ode.py` for Fig 8 (that is the ODE grid and takes hours).
 
 If checkout is blocked by local edits:
 
