@@ -526,7 +526,7 @@ def main() -> Dict[str, object]:
     fig_drg = plot_flux_panels(flux_data_all, species=("DRUG",))
     _save(fig_drg, outdir, "10_flux_decomposition_furosemide_greyscale")
 
-    fig_all = plot_flux_panels(flux_data_all, species=("DRUG", "IS", "pCS", "HA"))
+    fig_all = plot_flux_panels(flux_data_all, species=("DRUG", "IS", "HA", "pCS"))
     _save(fig_all, outdir, "11_flux_decomposition_all_greyscale")
 
     from flux_export import export_flux_results
