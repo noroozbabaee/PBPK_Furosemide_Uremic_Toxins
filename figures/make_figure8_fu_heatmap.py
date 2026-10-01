@@ -4,7 +4,8 @@
 Same closed-form as heatmap_analytical_formulas.py / analytical_ss.
 Style matches analysis/plot_clearance_flux_decomposition.py:
   no grid, no contours, no axhline/axvline, no legend, no suptitle;
-  top/right spines off; panel letters A–C; caption lives in LaTeX.
+  top/right spines off; panel letters A–C; caption lives in
+  docs/figure_caption_figure8_fu_heatmap.tex (y-axis = × Deltombe CKD-5 fu_p).
 
 Does not run the ODE. Outputs:
   results/heatmap_fu_analytical_3panels.pdf
