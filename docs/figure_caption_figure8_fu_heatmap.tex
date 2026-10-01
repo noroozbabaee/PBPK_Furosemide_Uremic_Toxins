@@ -1,30 +1,26 @@
 % Caption for heatmap_fu_analytical_3panels.pdf  (Fig 8, fig:fu_heatmap)
-% Panels: A IS, B pCS, C HA (same as five-panel / Fig 6).
-% Y-axis is a multiplier of Deltombe CKD-5 fu_p, not fu_p itself.
+% Original layout: A IS, B HA, C pCS. No Deltombe/Costes dashed lines.
+% Y-axis = toxin fu_p after multiplication. Star = model operating point.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{Figures/heatmap_fu_analytical_3panels.pdf}
 \caption{%
-\textbf{Analytical sensitivity of last-cycle PBUT plasma concentration to
-unbound fractions.}
-Panels \textbf{A} (indoxyl sulfate, IS), \textbf{B} ($p$-cresyl sulfate, pCS)
-and \textbf{C} (hippuric acid, HA). Colour is the closed-form percentage
-change $\Delta\overline{C}$ (\%) versus the no-drug CKD-5 baseline, not an
-ODE map.
-The \textbf{x}-axis is furosemide plasma unbound fraction $f_{u,p}$
-(absolute units, $0.01$--$0.13$; the model value is $0.05$).
-The \textbf{y}-axis is \emph{not} toxin $f_{u,p}$. It is a multiplier of the
-CKD-5 unbound fraction reported by Deltombe et~al.\ (\textit{Toxins} 2015)
-(\textbf{y}${}=1$):
-IS $0.10$, pCS $0.05$, HA $0.52$.
-Thus \textbf{y}${}=0.3$ means the toxin is more protein-bound than that
-reference (IS $0.03$, pCS $0.015$, HA $0.16$),
-and \textbf{y}${}=2$ means twice as unbound (IS $0.20$, pCS $0.10$, HA $1.04$).
-The same y-scale is used on all three panels so one axis can cover toxins
-with very different $f_{u,p}$.
-The colour at $x=0.05$, $y=1$ is the analytical prediction at the paper's
-usual binding values.
+\textbf{Two-dimensional sensitivity of PBUT total plasma accumulation to
+furosemide and toxin plasma unbound fractions}, under chronic oral
+furosemide TID ($3\times80$\,mg/day) in CKD-5.
+Colour is the closed-form percentage change $\Delta C_{ss}$ (\%) in
+time-averaged total plasma concentration relative to the no-drug CKD-5
+state, for IS (\textbf{A}), HA (\textbf{B}) and pCS (\textbf{C}).
+The $x$-axis is furosemide $f_{u,p}$ (0.01--0.15).
+The $y$-axis is the toxin $f_{u,p}$ after scaling the Deltombe CKD-5
+value (IS $0.10$, HA $0.52$, pCS $0.05$) over $0.4$--$2.5\times$.
+The black star is the model point ($f_{u,p}^{\mathrm{furo}}=0.05$ at the
+Deltombe toxin $f_{u,p}$).
+No isolines are drawn.
+Unbound furosemide in the map is $C_{u}=C_{\mathrm{ss,plasma}}\,f_{u,p}$
+(plasma $C_{\mathrm{ss}}$; no extra $BP$ division).
+$K_i=0.35$\,mg/L.
 }
 \label{fig:fu_heatmap}
 \end{figure}

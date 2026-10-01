@@ -91,7 +91,7 @@ Gitignores `results/*`. **Keep local NPZs**; they are not on GitHub.
 |---|---|
 | Five-panel A–E | `figures/make_chronic_oral_five_panel.py` |
 | Ki×Vmax IV supplementary (not Fig 7) | `figures/heatmap_ki_vmax_from_cache.py` + `analysis/heatmap_ki_vmax_engine.py` |
-| Fig 8 analytical $f_u\times f_u$ (IS, pCS, HA; no contours) | `figures/make_figure8_fu_heatmap.py`. Caption: `docs/figure_caption_figure8_fu_heatmap.tex` (y-axis = multiplier of Deltombe CKD-5 $f_{u,p}$, not $f_u$ itself) |
+| Fig 8 analytical $f_u\times f_u$ (A IS, B HA, C pCS; star; **no dashed lines**) | `figures/make_figure8_fu_heatmap.py`. Caption: `docs/figure_caption_figure8_fu_heatmap.tex`. Y-axis = toxin $f_{u,p}$ after multiplication |
 | Corner ODE vs analytical | `analysis/heatmap_validate_corners.py` |
 | PPT panel E only | `figures/make_ppt_furosemide_24h.py` |
 | %Δ bars A–C (IS, pCS, HA; Total/Bound/Unbound; Costes CI) | `figures/make_chronic_oral_pct_bars.py` |
