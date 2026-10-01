@@ -147,11 +147,11 @@ def _set_times() -> None:
         "axes.spines.top": False,
         "axes.spines.right": False,
         "axes.grid": False,
-        "axes.titlesize": 11,
-        "axes.labelsize": 11,
-        "xtick.labelsize": 11,
-        "ytick.labelsize": 11,
-        "legend.fontsize": 10,
+        "axes.titlesize": 16,
+        "axes.labelsize": 12,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+        "legend.fontsize": 12,
         "axes.linewidth": 0.8,
     })
 
