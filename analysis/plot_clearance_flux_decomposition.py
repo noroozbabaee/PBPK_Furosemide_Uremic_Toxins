@@ -378,10 +378,10 @@ def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
     _set_times()
     scenarios = list(flux_by_scenario.keys())
     panels = [
-        ("filtration",          "A"),
-        ("basolateral_passive", "B"),
-        ("basolateral_uptake",  "C"),
-        ("apical_secretion",    "D"),
+        ("filtration",          "A", "Glomerular filtration"),
+        ("basolateral_passive", "B", "Basolateral passive diffusion"),
+        ("basolateral_uptake",  "C", "Basolateral OAT1 uptake"),
+        ("apical_secretion",    "D", "Apical secretion"),
     ]
     fig, axes = plt.subplots(2, 2, figsize=(12, 7.6))
     fig.patch.set_facecolor("white")
@@ -392,7 +392,7 @@ def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
     left0 = x - (len(scenarios) - 1) * width / 2.0
     handles_for_legend = None
 
-    for ax, (key, letter) in zip(axes, panels):
+    for ax, (key, letter, subtitle) in zip(axes, panels):
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         ax.grid(False)
@@ -404,11 +404,8 @@ def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
             ax.set_ylabel("Flux (mg/h)\n(symmetric log scale)")
         else:
             ax.set_ylabel("Flux (mg/h)")
-        ax.text(
-            0.02, 0.95, letter,
-            transform=ax.transAxes,
-            fontsize=16, fontweight="bold", va="top", ha="left",
-        )
+        ax.set_title(f"{letter}  {subtitle}", loc="left",
+                     fontsize=16, fontweight="bold", pad=6)
         handles = []
         for j, sc in enumerate(scenarios):
             vals = [float(flux_by_scenario[sc][key].get(sp, 0.0)) for sp in species]
@@ -517,7 +514,7 @@ def main() -> Dict[str, object]:
     sol_H_ss, sol_C_ss = reach_steady_state()
     solutions, meta, flux_data_all = run_main_scenarios(sol_H_ss, sol_C_ss)
 
-    fig_tox = plot_flux_panels(flux_data_all, species=("IS", "pCS", "HA"))
+    fig_tox = plot_flux_panels(flux_data_all, species=("IS", "HA", "pCS"))
     _save(fig_tox, outdir, "09_flux_decomposition_PBUTs_greyscale")
     fig4 = os.path.join(_PUB_FIG, "Fig4.pdf")
     fig_tox.savefig(
