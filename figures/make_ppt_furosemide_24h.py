@@ -78,6 +78,7 @@ def plot(with_legend: bool) -> plt.Figure:
             raise FileNotFoundError(path)
         d = np.load(path, allow_pickle=False)
         th, yh = _last_day(d["t_all"], d["drg_all"])
+        yh = np.asarray(yh, dtype=float) / 0.82  # total plasma
         ax.plot(th, yh, ls=ls, color=c, lw=lw, label=label, zorder=3)
         if yh.size > 1:
             trap = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
@@ -85,7 +86,7 @@ def plot(with_legend: bool) -> plt.Figure:
             ax.axhline(mean, color=c, ls=":", lw=0.9, alpha=0.85, zorder=1)
 
     ax.set_xlim(0, 24)
-    ax.set_ylim(0, 22)
+    ax.set_ylim(0, 24)
     ax.set_xticks([0, 5, 10, 15, 20])
     ax.set_yticks([0, 5, 10, 15, 20])
     ax.tick_params(labelsize=12, length=4, width=0.9)

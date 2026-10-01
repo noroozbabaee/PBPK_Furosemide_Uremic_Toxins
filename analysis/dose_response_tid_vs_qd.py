@@ -213,6 +213,9 @@ def _build_fingerprint(live_pk: dict) -> dict:
         # 1 = residual furosemide is carried across days (not zeroed at 24 h)
         CHRONIC_CARRYOVER=1.0,
         HA_TRACKED=1.0,
+        # pCS pKa = −2 (sulfate). Old caches used 6.9 and must not reload.
+        PKA_PCS=float(CP.TOX3_BASE["pKa"]) if hasattr(CP, "TOX3_BASE") else -2.0,
+        PKA_IS=float(CP.TOX1_BASE["pKa"]) if hasattr(CP, "TOX1_BASE") else -1.8,
         # Live PK — if model changes, these will differ and force re-run
         CL_FURO=live_pk["CL_FURO"],
         CL_R_IS=live_pk["CL_R_IS"],
@@ -234,15 +237,15 @@ def _cache_is_valid(cache_path: str, live_pk: dict) -> bool:
 
     fp = _build_fingerprint(live_pk)
     mismatches = []
-    for key, current_val in fp.items():
-        if "HA_all" not in cache.files:
-            mismatches.append(("HA_all", "MISSING", "required"))
-            continue
-        cached_val = float(cache[key].flat[0])
-        if abs(cached_val - current_val) > 1e-9:
-            mismatches.append((key, cached_val, current_val))
     if "HA_all" not in cache.files:
         mismatches.append(("HA_all", "MISSING", "required"))
+    for key, current_val in fp.items():
+        if key not in cache.files:
+            mismatches.append((key, "MISSING", current_val))
+            continue
+        cached_val = float(cache[key].flat[0])
+        if abs(cached_val - current_val) > 1e-6:
+            mismatches.append((key, cached_val, current_val))
 
     if mismatches:
         print(f"\n  [CACHE] Parameter mismatch — forcing re-run:")

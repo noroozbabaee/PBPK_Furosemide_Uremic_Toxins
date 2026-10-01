@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """Five-panel chronic oral CKD-5 figure (paper layout).
 
-A–C: 30-day IS / pCS / HA plasma
-D:   furosemide, final 3-day window
-E:   furosemide, final 24 h cycle
+A–C: 30-day IS / pCS / HA **total plasma** (ODE blood / BP)
+D:   furosemide total plasma, final 3-day window
+E:   furosemide total plasma, final 24 h cycle
 
 Traces: TID 120 mg/day (40×3), QD 240 mg/day, TID 240 mg/day (80×3),
         no-drug CKD-5 baseline.
 
-Uses analysis/dose_response_tid_vs_qd.py for the ODE; writes
-publication_code/Figures/chronic_oral_five_panel.pdf
+Caches must share the post-pKa pCS baseline (~13.7 mg/L blood = 24.99 plasma).
+Furosemide leftover is carried across midnight (not zeroed).
 """
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ import numpy as np
 
 
 def _set_times_new_roman() -> None:
-    """Prefer Times New Roman (Windows); Liberation Serif on Linux."""
     available = {f.name for f in font_manager.fontManager.ttflist}
     chosen = next(
         (
@@ -61,7 +60,6 @@ def _set_times_new_roman() -> None:
 
 
 def _save_fig(fig, path: str, dpi: int = 300) -> None:
-    """Crop the PDF/PNG to the ink (axes + labels + legend), small pad only."""
     fig.set_facecolor("white")
     fig.savefig(
         path,
@@ -89,14 +87,25 @@ for _p in (_SRC, _ANALYSIS):
 import constants as K  # noqa: E402
 K.VERBOSE = False
 
+import compound_parameters as CP  # noqa: E402
 import dose_response_tid_vs_qd as gen  # noqa: E402
 import compare_dosing_regimens_grey_HA_ADDED as cmp  # noqa: E402
 
 K.VERBOSE = False
 
+# Total plasma = ODE blood / BP (same values as Table 1 / compounds.py).
+BP = {
+    "IS_all": float(CP.TOX1_BASE.get("BP", 0.70)),
+    "HA_all": float(CP.TOX2_BASE.get("BP", 0.84)),
+    "pCS_all": float(CP.TOX3_BASE.get("BP", 0.55)),
+    "drg_all": float(CP.DRUG_BASE.get("BP", 0.82)),
+}
+
+# Post-pKa CKD-5 no-drug blood SS. Old pKa=6.9 caches sit near 17.9.
+PCS_BLOOD_OK = (12.0, 15.5)
+
 
 JOBS = (
-    # label, dose, n_doses, times, linestyle, color, lw
     ("TID 120 mg/day", 40.0, 3, [0.0, 8.0, 16.0], "--", "0.35", 1.3),
     ("QD 240 mg/day", 240.0, 1, [0.0], ":", "0.15", 1.3),
     ("TID 240 mg/day", 80.0, 3, [0.0, 8.0, 16.0], "-", "0.0", 1.8),
@@ -106,7 +115,11 @@ JOBS = (
 
 CKD_IS_MIN = 8.0
 CKD_IS_MAX = 80.0
-HEALTHY_IS_MAX = 2.0  # healthy / acute IS_base is ~0.54 mg/L
+HEALTHY_IS_MAX = 2.0
+
+
+def _to_plasma(key: str, y) -> np.ndarray:
+    return np.asarray(y, dtype=float) / BP[key]
 
 
 def _is_base_of(d) -> float:
@@ -118,8 +131,16 @@ def _is_base_of(d) -> float:
     return float(is_all[0])
 
 
+def _named_base(d, blood_key: str, arr_key: str) -> float:
+    files = getattr(d, "files", ())
+    if blood_key in files:
+        return float(np.asarray(d[blood_key]).flat[0])
+    if isinstance(d, dict) and blood_key in d:
+        return float(np.asarray(d[blood_key]).flat[0])
+    return float(np.asarray(d[arr_key])[0])
+
+
 def _refuse_if_not_ckd5(path: str, d, label: str) -> float:
-    """Abort if this NPZ is healthy/acute. Return IS_base."""
     fname = os.path.basename(path) if path else label
     lower = fname.lower()
     if "healthy" in lower:
@@ -130,12 +151,20 @@ def _refuse_if_not_ckd5(path: str, d, label: str) -> float:
     if is_base <= HEALTHY_IS_MAX:
         raise RuntimeError(
             f"{label}: IS_base={is_base:.3f} mg/L is HEALTHY/acute (~0.54), "
-            f"not CKD-5 (~20). File={fname}. Do not plot this with CKD-5 arms."
+            f"not CKD-5 (~20). File={fname}."
         )
     if not (CKD_IS_MIN <= is_base <= CKD_IS_MAX):
         raise RuntimeError(
             f"{label}: IS_base={is_base:.3f} mg/L is outside CKD-5 "
             f"({CKD_IS_MIN:.0f}–{CKD_IS_MAX:.0f}). File={fname}."
+        )
+    pcs = _named_base(d, "pCS_base", "pCS_all")
+    lo, hi = PCS_BLOOD_OK
+    if not (lo <= pcs <= hi):
+        raise RuntimeError(
+            f"{label}: pCS_base={pcs:.3f} mg/L blood is not the pKa=−2 SS "
+            f"({lo:.1f}–{hi:.1f}; expected ~13.7). File={fname}. "
+            "This is an old pKa=6.9 cache — delete it and re-run the 30-day ODE."
         )
     mode = None
     if hasattr(d, "files") and "MODE_CODE" in d.files:
@@ -144,8 +173,40 @@ def _refuse_if_not_ckd5(path: str, d, label: str) -> float:
         raise RuntimeError(f"{label}: MODE_CODE=0 (healthy) in {fname}")
     if mode is not None and abs(mode - 5.0) > 1e-9:
         raise RuntimeError(f"{label}: MODE_CODE={mode} in {fname}, expected CKD-5")
-    print(f"  [CKD-5] {label}: IS_base={is_base:.3f} mg/L  file={fname}", flush=True)
+    print(
+        f"  [CKD-5] {label}: IS_base={is_base:.3f}  pCS_base={pcs:.3f} mg/L blood"
+        f"  file={fname}",
+        flush=True,
+    )
     return is_base
+
+
+def _day_boundary_report(label: str, data: dict) -> None:
+    """Print C_ven just before/after midnight. RESET = leftover was zeroed."""
+    t = np.asarray(data["t_all"], dtype=float)
+    y = np.asarray(data["drg_all"], dtype=float)
+    print(f"  [DAY BOUNDARY] {label}  (furosemide BLOOD mg/L)", flush=True)
+    n_reset = 0
+    for day in (27, 28, 29):
+        t_mid = day * 24.0
+        before = y[(t < t_mid) & (t >= t_mid - 0.75)]
+        after = y[(t >= t_mid) & (t < t_mid + 0.75)]
+        if before.size == 0 or after.size == 0:
+            print(f"    day {day:.0f}: no samples around midnight", flush=True)
+            continue
+        yb, ya = float(before[-1]), float(after[0])
+        flag = ""
+        if yb > 0.4 and ya < 0.25 * yb:
+            flag = "  RESET"
+            n_reset += 1
+        print(f"    t={t_mid:.1f} h  before={yb:.3f}  after={ya:.3f}{flag}", flush=True)
+    if n_reset:
+        raise RuntimeError(
+            f"{label}: furosemide collapsed at {n_reset} midnight(s). "
+            "Residual C_ven was not carried into the next day. "
+            "Delete this NPZ and re-run with the current run_one_day_tid "
+            "(CHRONIC_CARRYOVER=1)."
+        )
 
 
 def _arrays_from_cache(path: str, label: str) -> dict:
@@ -155,13 +216,15 @@ def _arrays_from_cache(path: str, label: str) -> dict:
     if missing:
         raise FileNotFoundError(f"{os.path.basename(path)} missing {missing}")
     is_base = _refuse_if_not_ckd5(path, d, label)
-    out = {k: d[k] for k in need}
+    out = {k: np.asarray(d[k]) for k in need}
     out["IS_base"] = np.array([is_base])
+    out["HA_base"] = np.array([_named_base(d, "HA_base", "HA_all")])
+    out["pCS_base"] = np.array([_named_base(d, "pCS_base", "pCS_all")])
+    _day_boundary_report(label, out)
     return out
 
 
 def _nodrug_from_sibling() -> dict | None:
-    """Flat no-drug traces from a CKD-5 40×3 cache if dose0 NPZ is absent."""
     try:
         path = cmp._find_cache(40.0, 3)
     except FileNotFoundError:
@@ -170,10 +233,8 @@ def _nodrug_from_sibling() -> dict | None:
     _refuse_if_not_ckd5(path, d, "No-drug CKD-5 baseline")
     t = np.asarray(d["t_all"])
     is0 = _is_base_of(d)
-    ha0 = float(np.asarray(d["HA_base"]).flat[0]) if "HA_base" in d.files else float(d["HA_all"][0])
-    pcs0 = float(np.asarray(d["pCS_base"]).flat[0]) if "pCS_base" in d.files else float(d["pCS_all"][0])
-    if is0 <= HEALTHY_IS_MAX:
-        raise RuntimeError("no-drug sibling cache is healthy — refused")
+    ha0 = _named_base(d, "HA_base", "HA_all")
+    pcs0 = _named_base(d, "pCS_base", "pCS_all")
     print(f"  [CACHE] no-drug CKD-5 SS from {os.path.basename(path)}", flush=True)
     return dict(
         t_all=t,
@@ -182,6 +243,8 @@ def _nodrug_from_sibling() -> dict | None:
         pCS_all=np.full_like(t, pcs0, dtype=float),
         drg_all=np.zeros_like(t, dtype=float),
         IS_base=np.array([is0]),
+        HA_base=np.array([ha0]),
+        pCS_base=np.array([pcs0]),
     )
 
 
@@ -208,26 +271,31 @@ def _load_or_run(label, ic_ss, live_pk, dose, n_doses, times):
     gen.DOSE_TIMES_H = list(times)
     gen.DOSE_INTERVAL_H = gen.TAU_H if n_doses <= 1 else gen.TAU_H / float(n_doses)
 
+    def _restore():
+        for k, v in saved.items():
+            setattr(gen, k, v)
+
+    # Prefer a globbed cache only if it passes pKa / pCS / CKD guards.
     try:
-        return _arrays_from_cache(cmp._find_cache(float(dose), int(n_doses)), label)
+        found = cmp._find_cache(float(dose), int(n_doses))
+        out = _arrays_from_cache(found, label)
+        _restore()
+        return out
     except FileNotFoundError:
         pass
+    except RuntimeError as exc:
+        print(f"  [SKIP STALE] {exc}", flush=True)
 
     if int(n_doses) == 0:
         nodrug = _nodrug_from_sibling()
         if nodrug is not None:
-            for k, v in saved.items():
-                setattr(gen, k, v)
+            _restore()
             return nodrug
 
     path = _cache_file(dose, n_doses)
     if live_pk and gen._cache_is_valid(path, live_pk):
-        d = np.load(path, allow_pickle=False)
-        _refuse_if_not_ckd5(path, d, label)
-        for k, v in saved.items():
-            setattr(gen, k, v)
-        out = {k: d[k] for k in ("t_all", "IS_all", "HA_all", "pCS_all", "drg_all")}
-        out["IS_base"] = np.array([_is_base_of(d)])
+        out = _arrays_from_cache(path, label)
+        _restore()
         return out
 
     print(f"  simulating {n_doses}×{dose:g} mg ...", flush=True)
@@ -235,39 +303,47 @@ def _load_or_run(label, ic_ss, live_pk, dose, n_doses, times):
     oral = None if n_doses == 0 else gen.build_oral_profile(dose)
     t, IS, HA, pCS, drg = gen._run_simulation(ic_ss, live_pk, dose, n_doses, times, oral)
     print(f"    done in {(time.time() - t0) / 60:.1f} min", flush=True)
-    fp = gen._build_fingerprint(live_pk)
-    save = dict(t_all=t, IS_all=IS, HA_all=HA, pCS_all=pCS, drg_all=drg,
-                IS_base=np.array([ic_ss.get("C_tox1_cen", 0.0)]),
-                pCS_base=np.array([ic_ss.get("C_tox3_cen", 0.0)]),
-                HA_base=np.array([ic_ss.get("C_tox2_cen", 0.0)]))
+    fp = gen._build_fingerprint(live_pk) if live_pk else {}
+    save = dict(
+        t_all=t, IS_all=IS, HA_all=HA, pCS_all=pCS, drg_all=drg,
+        IS_base=np.array([ic_ss.get("C_tox1_cen", float(IS[0]))]),
+        pCS_base=np.array([ic_ss.get("C_tox3_cen", float(pCS[0]))]),
+        HA_base=np.array([ic_ss.get("C_tox2_cen", float(HA[0]))]),
+    )
     save.update({k: np.array([v]) for k, v in fp.items()})
     np.savez(path, **save)
     print(f"  [CACHE] {path}", flush=True)
-    for k, v in saved.items():
-        setattr(gen, k, v)
-    return dict(t_all=t, IS_all=IS, HA_all=HA, pCS_all=pCS, drg_all=drg)
+    _restore()
+    out = dict(t_all=t, IS_all=IS, HA_all=HA, pCS_all=pCS, drg_all=drg,
+               IS_base=save["IS_base"], HA_base=save["HA_base"],
+               pCS_base=save["pCS_base"])
+    _day_boundary_report(label, out)
+    return out
 
 
 def _style(ax):
     ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.tick_params(labelsize=10, pad=3)
+    ax.tick_params(labelsize=7, pad=2)
+
+
+def _panel_title(ax, text: str) -> None:
+    ax.set_title(text, loc="left", fontsize=8, fontweight="bold", pad=3, fontfamily="serif")
 
 
 def plot(runs) -> plt.Figure:
     _set_times_new_roman()
-    # Extra width + large wspace so y-labels of A/B/C and D/E do not collide.
-    fig = plt.figure(figsize=(14.2, 8.0))
+    # Journal text width (~6.27 in). Fonts 7–8 pt so they survive column shrink.
+    fig = plt.figure(figsize=(6.27, 7.35))
     gs = gridspec.GridSpec(
         2,
         6,
         figure=fig,
-        hspace=0.50,
-        wspace=0.72,
-        left=0.06,
-        right=0.995,
-        top=0.98,
-        bottom=0.10,
+        hspace=0.42,
+        wspace=0.85,
+        left=0.10,
+        right=0.88,
+        top=0.96,
+        bottom=0.12,
     )
     axA = fig.add_subplot(gs[0, 0:2])
     axB = fig.add_subplot(gs[0, 2:4])
@@ -275,83 +351,86 @@ def plot(runs) -> plt.Figure:
     axD = fig.add_subplot(gs[1, 0:3])
     axE = fig.add_subplot(gs[1, 3:6])
 
+    nodrug = next(data for lab, data, *_ in runs if "No-drug" in lab)
+    bases_pl = {
+        "IS_all": float(nodrug["IS_base"].flat[0]) / BP["IS_all"],
+        "pCS_all": float(nodrug["pCS_base"].flat[0]) / BP["pCS_all"],
+        "HA_all": float(nodrug["HA_base"].flat[0]) / BP["HA_all"],
+    }
+
     top = (
-        (axA, "IS_all", "IS plasma\nconcentration (mg/L)", "A. IS"),
-        (axB, "pCS_all", "p-CS plasma\nconcentration (mg/L)", "B. pCS"),
-        (axC, "HA_all", "HA plasma\nconcentration (mg/L)", "C. HA"),
+        (axA, "IS_all", "IS plasma\n(mg/L)", "A  IS"),
+        (axB, "pCS_all", "pCS plasma\n(mg/L)", "B  pCS"),
+        (axC, "HA_all", "HA plasma\n(mg/L)", "C  HA"),
     )
     for ax, key, ylab, letter in top:
+        c0 = bases_pl[key]
+        ys = []
         for label, data, ls, c, lw in runs:
             t_d = np.asarray(data["t_all"]) / 24.0
-            ax.plot(t_d, data[key], ls=ls, color=c, lw=lw, label=label)
-        ax.set_xlabel("Time (days)", fontsize=11)
-        ax.set_ylabel(ylab, fontsize=11, labelpad=8)
+            ypl = _to_plasma(key, data[key])
+            ys.append(ypl)
+            ax.plot(t_d, ypl, ls=ls, color=c, lw=lw, label=label)
+        ax.set_xlabel("Time (days)", fontsize=7)
+        ax.set_ylabel(ylab, fontsize=7, labelpad=4)
         ax.set_xlim(0, 30)
+        ymin = min(float(np.min(y)) for y in ys)
+        ymax = max(float(np.max(y)) for y in ys)
+        pad = max(0.04 * (ymax - ymin), 0.15)
+        ax.set_ylim(ymin - pad, ymax + pad)
         _style(ax)
-        ax.text(
-            0.02,
-            0.97,
-            letter,
-            transform=ax.transAxes,
-            fontsize=14,
-            fontweight="bold",
-            va="top",
-            fontfamily="serif",
-        )
+        ax.spines["right"].set_visible(True)
+        ax2 = ax.twinx()
+        y0, y1 = ax.get_ylim()
+        ax2.set_ylim((y0 - c0) / c0 * 100.0, (y1 - c0) / c0 * 100.0)
+        ax2.set_ylabel("% vs baseline", fontsize=7, labelpad=3)
+        ax2.tick_params(labelsize=7)
+        ax2.spines["top"].set_visible(False)
+        _panel_title(ax, letter)
 
     t_lo, t_hi = 27.0 * 24.0, 30.0 * 24.0
     for label, data, ls, c, lw in runs:
         t = np.asarray(data["t_all"])
         m = (t >= t_lo) & (t <= t_hi)
-        axD.plot(t[m] / 24.0, data["drg_all"][m], ls=ls, color=c, lw=lw, label=label)
-    axD.set_xlabel("Time (days), final 3-day window", fontsize=11)
-    axD.set_ylabel("Furosemide plasma\nconcentration (mg/L)", fontsize=11, labelpad=8)
+        axD.plot(t[m] / 24.0, _to_plasma("drg_all", data["drg_all"])[m],
+                 ls=ls, color=c, lw=lw, label=label)
+    for day in (27.0, 28.0, 29.0):
+        for h in (0.0, 8.0, 16.0):
+            axD.axvline(day + h / 24.0, color="0.82", lw=0.5, zorder=0)
+    axD.set_xlabel("Time (days), final 3-day window", fontsize=7)
+    axD.set_ylabel("Furosemide plasma\n(mg/L)", fontsize=7, labelpad=4)
     axD.set_xlim(27, 30)
     _style(axD)
-    axD.text(
-        0.02,
-        0.97,
-        "D",
-        transform=axD.transAxes,
-        fontsize=14,
-        fontweight="bold",
-        va="top",
-        fontfamily="serif",
-    )
+    axD.spines["right"].set_visible(False)
+    _panel_title(axD, "D")
 
     for label, data, ls, c, lw in runs:
         t = np.asarray(data["t_all"])
         t0 = 29.0 * 24.0
         m = (t >= t0) & (t <= t0 + 24.0)
-        axE.plot(t[m] - t0, data["drg_all"][m], ls=ls, color=c, lw=lw, label=label)
-    axE.set_xlabel("Time within final 24-h dosing cycle (h)", fontsize=11)
-    axE.set_ylabel("Furosemide plasma\nconcentration (mg/L)", fontsize=11, labelpad=8)
+        axE.plot(t[m] - t0, _to_plasma("drg_all", data["drg_all"])[m],
+                 ls=ls, color=c, lw=lw, label=label)
+    for h in (0.0, 8.0, 16.0):
+        axE.axvline(h, color="0.82", lw=0.5, zorder=0)
+    axE.set_xlabel("Time within final 24-h dosing cycle (h)", fontsize=7)
+    axE.set_ylabel("Furosemide plasma\n(mg/L)", fontsize=7, labelpad=4)
     axE.set_xlim(0, 24)
     _style(axE)
-    axE.text(
-        0.02,
-        0.97,
-        "E",
-        transform=axE.transAxes,
-        fontsize=14,
-        fontweight="bold",
-        va="top",
-        fontfamily="serif",
-    )
+    axE.spines["right"].set_visible(False)
+    _panel_title(axE, "E")
 
     handles, labels = axA.get_legend_handles_labels()
     fig.legend(
         handles,
         labels,
         loc="lower center",
-        ncol=4,
+        ncol=2,
         frameon=False,
-        fontsize=11,
         bbox_to_anchor=(0.5, 0.0),
-        borderaxespad=0.4,
-        columnspacing=1.8,
-        handlelength=2.6,
-        prop={"family": "serif", "size": 11},
+        borderaxespad=0.2,
+        columnspacing=1.4,
+        handlelength=2.4,
+        prop={"family": "serif", "size": 7},
     )
     return fig
 
@@ -361,19 +440,26 @@ def _all_dose_caches_present() -> bool:
         if int(n) == 0:
             continue
         try:
-            cmp._find_cache(float(dose), int(n))
-        except FileNotFoundError:
+            path = cmp._find_cache(float(dose), int(n))
+            d = np.load(path, allow_pickle=False)
+            _refuse_if_not_ckd5(path, d, _label)
+        except (FileNotFoundError, RuntimeError):
             return False
     return True
 
 
 def main() -> None:
-    print("Five-panel chronic oral figure (CKD-5)", flush=True)
+    print("Five-panel chronic oral figure (CKD-5, total plasma = blood/BP)", flush=True)
+    print(
+        f"  BP  IS={BP['IS_all']:.2f}  HA={BP['HA_all']:.2f}  "
+        f"pCS={BP['pCS_all']:.2f}  furo={BP['drg_all']:.2f}",
+        flush=True,
+    )
     if _all_dose_caches_present():
-        print("  Existing 40×3, 240×1, 80×3 caches found — skip ODE warm-up.", flush=True)
+        print("  Valid pKa=−2 CKD-5 caches found — skip ODE warm-up.", flush=True)
         ic_ss, live_pk = {}, {}
     else:
-        print("  Cache missing — SS warm-up + 30-day arms.", flush=True)
+        print("  Cache missing or stale — SS warm-up + 30-day arms.", flush=True)
         ic_ss = gen.warmup()
         live_pk = gen.extract_baseline_pk(ic_ss)
     runs = []
@@ -381,23 +467,29 @@ def main() -> None:
         data = _load_or_run(label, ic_ss, live_pk, dose, n, times)
         runs.append((label, data, ls, c, lw))
     bases = [_is_base_of(data) for _lab, data, *_rest in runs]
+    pcs_b = [float(np.asarray(data["pCS_base"]).flat[0]) for _lab, data, *_ in runs]
     mid = float(np.median(bases))
-    print("\n========== PHENOTYPE (must all be CKD-5) ==========", flush=True)
-    for (lab, data, *_rest), b in zip(runs, bases):
+    mid_p = float(np.median(pcs_b))
+    print("\n========== PHENOTYPE (must all be CKD-5, same pCS SS) ==========", flush=True)
+    for (lab, data, *_rest), b, p in zip(runs, bases, pcs_b):
         tag = "HEALTHY/ACUTE" if b <= HEALTHY_IS_MAX else "CKD-5"
-        print(f"  {lab:<28} IS_base={b:8.3f} mg/L  [{tag}]", flush=True)
+        print(
+            f"  {lab:<28} IS_base={b:8.3f}  pCS_base={p:8.3f} mg/L blood  [{tag}]",
+            flush=True,
+        )
         if b <= HEALTHY_IS_MAX:
+            raise RuntimeError(f"{lab} is {tag} (IS_base={b:.3f}).")
+        if abs(b - mid) / max(mid, 1e-9) > 0.05:
+            raise RuntimeError(f"IS_base mix: {lab}={b:.3f} vs group {mid:.3f}.")
+        if abs(p - mid_p) / max(mid_p, 1e-9) > 0.01:
             raise RuntimeError(
-                f"{lab} is {tag} (IS_base={b:.3f}). "
-                "This five-panel figure is CKD-5 chronic oral only."
+                f"pCS_base mix (old vs new pKa): {lab}={p:.3f} vs group {mid_p:.3f}."
             )
-        if abs(b - mid) / max(mid, 1e-9) > 0.15:
-            raise RuntimeError(
-                f"IS_base mix: {lab}={b:.3f} vs group {mid:.3f}. "
-                "Healthy and CKD-5 caches were combined — refused."
-            )
-    print(f"  All four traces CKD-5, IS_base ≈ {mid:.3f} mg/L", flush=True)
-    print("==================================================\n", flush=True)
+    print(
+        f"  All four traces CKD-5, IS_base ≈ {mid:.3f}, pCS_base ≈ {mid_p:.3f} mg/L blood",
+        flush=True,
+    )
+    print("==============================================================\n", flush=True)
     fig = plot(runs)
     stem = "chronic_oral_five_panel"
     for folder in (_RESULTS, _PUB_FIG):
