@@ -79,7 +79,9 @@ Insert `publication_code/Figures/chronic_oral_furosemide_24h_cycle_ppt_legend.pn
 
 | Paper file | Script |
 |---|---|
-| `Figures/09_flux_decomposition_PBUTs_greyscale.pdf` | `analysis/plot_clearance_flux_decomposition.py` |
+| `Figures/Fig4.pdf` | `analysis/plot_clearance_flux_decomposition.py` |
+
+Do **not** use the old `09_flux_decomposition_PBUTs_greyscale.{pdf,png}` (removed). Those scored healthy bars with leftover CKD-5 \(V_{\max}\).
 
 Legend: Healthy / CKD-5 × No Furosemide / With Furosemide (not “Drug”).
 
@@ -87,5 +89,5 @@ Legend: Healthy / CKD-5 × No Furosemide / With Furosemide (not “Drug”).
 PYTHONUTF8=1 python3 analysis/plot_clearance_flux_decomposition.py
 ```
 
-The PDF is written to `publication_code/Figures/` (manuscript include path) and to a timestamped folder under `results/flux_decomposition/`.
+The current PDF is `publication_code/Figures/Fig4.pdf`. Timestamped copies go under `results/flux_decomposition/` after a new run. Delete any local folder named `results/flux_decomposition/20261001_171848` — that run is the wrong healthy scoring.
 
