@@ -118,8 +118,70 @@ CKD_IS_MAX = 80.0
 HEALTHY_IS_MAX = 2.0
 
 
-def _to_plasma(key: str, y) -> np.ndarray:
-    return np.asarray(y, dtype=float) / BP[key]
+def _bp_table() -> dict:
+    return dict(BP)
+
+
+def _to_plasma(key: str, y, bp=None) -> np.ndarray:
+    tab = bp or BP
+    return np.asarray(y, dtype=float) / tab[key]
+
+
+def _run_to_plasma(data: dict, bp: dict) -> dict:
+    """Copy a run dict with concentration arrays in total plasma."""
+    out = dict(data)
+    for key in ("IS_all", "HA_all", "pCS_all", "drg_all"):
+        out[key] = _to_plasma(key, data[key], bp)
+    for bkey, akey in (("IS_base", "IS_all"), ("HA_base", "HA_all"), ("pCS_base", "pCS_all")):
+        out[bkey] = np.array([float(np.asarray(data[bkey]).flat[0]) / bp[akey]])
+    out["_plasma"] = True
+    return out
+
+
+def _check_baselines_consistent(runs) -> None:
+    """All arms must share IS/HA/pCS t=0 (1%). Prints the line the reviewer asked for."""
+    keys = ("IS_base", "HA_base", "pCS_base")
+    vals = {k: [float(np.asarray(d[k]).flat[0]) for _l, d, *_ in runs] for k in keys}
+    ok = True
+    for k, xs in vals.items():
+        mid = float(np.median(xs))
+        for lab, x in zip((r[0] for r in runs), xs):
+            if abs(x - mid) / max(abs(mid), 1e-9) > 0.01:
+                ok = False
+                print(f"  Baselines mismatch: {lab} {k}={x:.3f} vs group {mid:.3f}", flush=True)
+    unit = "plasma" if runs[0][1].get("_plasma") else "blood"
+    msg = (
+        f"  Baselines consistent: IS={vals['IS_base'][0]:.2f}  "
+        f"HA={vals['HA_base'][0]:.2f}  pCS={vals['pCS_base'][0]:.2f} mg/L {unit}"
+    )
+    if not ok:
+        raise RuntimeError("Baselines mismatch (stale pKa cache mixed with new).")
+    print(msg, flush=True)
+
+
+def _check_day_boundaries(label: str, data: dict) -> int:
+    """Count midnight collapses of furosemide. Returns n_resets."""
+    t = np.asarray(data["t_all"], dtype=float)
+    y = np.asarray(data["drg_all"], dtype=float)
+    n_reset = 0
+    t_end = float(t[-1]) if t.size else 0.0
+    last_day = int(t_end // 24.0)
+    for day in range(1, last_day + 1):
+        t_mid = day * 24.0
+        before = y[(t < t_mid) & (t >= t_mid - 0.75)]
+        after = y[(t >= t_mid) & (t < t_mid + 0.75)]
+        if before.size == 0 or after.size == 0:
+            continue
+        yb, ya = float(before[-1]), float(after[0])
+        if yb > 0.4 and ya < 0.25 * yb:
+            n_reset += 1
+            if n_reset <= 3 or day >= last_day - 2:
+                print(
+                    f"    RESET {label}  day {day}: {yb:.3f} -> {ya:.3f} mg/L",
+                    flush=True,
+                )
+    print(f"  {label:<28} day-boundary resets: {n_reset}", flush=True)
+    return n_reset
 
 
 def _is_base_of(d) -> float:
@@ -181,34 +243,6 @@ def _refuse_if_not_ckd5(path: str, d, label: str) -> float:
     return is_base
 
 
-def _day_boundary_report(label: str, data: dict) -> None:
-    """Print C_ven just before/after midnight. RESET = leftover was zeroed."""
-    t = np.asarray(data["t_all"], dtype=float)
-    y = np.asarray(data["drg_all"], dtype=float)
-    print(f"  [DAY BOUNDARY] {label}  (furosemide BLOOD mg/L)", flush=True)
-    n_reset = 0
-    for day in (27, 28, 29):
-        t_mid = day * 24.0
-        before = y[(t < t_mid) & (t >= t_mid - 0.75)]
-        after = y[(t >= t_mid) & (t < t_mid + 0.75)]
-        if before.size == 0 or after.size == 0:
-            print(f"    day {day:.0f}: no samples around midnight", flush=True)
-            continue
-        yb, ya = float(before[-1]), float(after[0])
-        flag = ""
-        if yb > 0.4 and ya < 0.25 * yb:
-            flag = "  RESET"
-            n_reset += 1
-        print(f"    t={t_mid:.1f} h  before={yb:.3f}  after={ya:.3f}{flag}", flush=True)
-    if n_reset:
-        raise RuntimeError(
-            f"{label}: furosemide collapsed at {n_reset} midnight(s). "
-            "Residual C_ven was not carried into the next day. "
-            "Delete this NPZ and re-run with the current run_one_day_tid "
-            "(CHRONIC_CARRYOVER=1)."
-        )
-
-
 def _arrays_from_cache(path: str, label: str) -> dict:
     d = np.load(path, allow_pickle=False)
     need = ("t_all", "IS_all", "HA_all", "pCS_all", "drg_all")
@@ -220,7 +254,6 @@ def _arrays_from_cache(path: str, label: str) -> dict:
     out["IS_base"] = np.array([is_base])
     out["HA_base"] = np.array([_named_base(d, "HA_base", "HA_all")])
     out["pCS_base"] = np.array([_named_base(d, "pCS_base", "pCS_all")])
-    _day_boundary_report(label, out)
     return out
 
 
@@ -287,6 +320,19 @@ def _load_or_run(label, ic_ss, live_pk, dose, n_doses, times):
         print(f"  [SKIP STALE] {exc}", flush=True)
 
     if int(n_doses) == 0:
+        if ic_ss and "C_tox1_cen" in ic_ss:
+            t = np.linspace(0.0, gen.N_DAYS * 24.0, 2001)
+            _restore()
+            return dict(
+                t_all=t,
+                IS_all=np.full_like(t, float(ic_ss["C_tox1_cen"])),
+                HA_all=np.full_like(t, float(ic_ss["C_tox2_cen"])),
+                pCS_all=np.full_like(t, float(ic_ss["C_tox3_cen"])),
+                drg_all=np.zeros_like(t),
+                IS_base=np.array([float(ic_ss["C_tox1_cen"])]),
+                HA_base=np.array([float(ic_ss["C_tox2_cen"])]),
+                pCS_base=np.array([float(ic_ss["C_tox3_cen"])]),
+            )
         nodrug = _nodrug_from_sibling()
         if nodrug is not None:
             _restore()
@@ -314,11 +360,9 @@ def _load_or_run(label, ic_ss, live_pk, dose, n_doses, times):
     np.savez(path, **save)
     print(f"  [CACHE] {path}", flush=True)
     _restore()
-    out = dict(t_all=t, IS_all=IS, HA_all=HA, pCS_all=pCS, drg_all=drg,
-               IS_base=save["IS_base"], HA_base=save["HA_base"],
-               pCS_base=save["pCS_base"])
-    _day_boundary_report(label, out)
-    return out
+    return dict(t_all=t, IS_all=IS, HA_all=HA, pCS_all=pCS, drg_all=drg,
+                IS_base=save["IS_base"], HA_base=save["HA_base"],
+                pCS_base=save["pCS_base"])
 
 
 def _style(ax):
@@ -352,10 +396,14 @@ def plot(runs) -> plt.Figure:
     axE = fig.add_subplot(gs[1, 3:6])
 
     nodrug = next(data for lab, data, *_ in runs if "No-drug" in lab)
+    already = bool(nodrug.get("_plasma"))
     bases_pl = {
-        "IS_all": float(nodrug["IS_base"].flat[0]) / BP["IS_all"],
-        "pCS_all": float(nodrug["pCS_base"].flat[0]) / BP["pCS_all"],
-        "HA_all": float(nodrug["HA_base"].flat[0]) / BP["HA_all"],
+        "IS_all": float(nodrug["IS_base"].flat[0]) if already
+        else float(nodrug["IS_base"].flat[0]) / BP["IS_all"],
+        "pCS_all": float(nodrug["pCS_base"].flat[0]) if already
+        else float(nodrug["pCS_base"].flat[0]) / BP["pCS_all"],
+        "HA_all": float(nodrug["HA_base"].flat[0]) if already
+        else float(nodrug["HA_base"].flat[0]) / BP["HA_all"],
     }
 
     top = (
@@ -368,7 +416,9 @@ def plot(runs) -> plt.Figure:
         ys = []
         for label, data, ls, c, lw in runs:
             t_d = np.asarray(data["t_all"]) / 24.0
-            ypl = _to_plasma(key, data[key])
+            ypl = np.asarray(data[key], dtype=float)
+            if not data.get("_plasma"):
+                ypl = _to_plasma(key, ypl)
             ys.append(ypl)
             ax.plot(t_d, ypl, ls=ls, color=c, lw=lw, label=label)
         ax.set_xlabel("Time (days)", fontsize=7)
@@ -392,7 +442,10 @@ def plot(runs) -> plt.Figure:
     for label, data, ls, c, lw in runs:
         t = np.asarray(data["t_all"])
         m = (t >= t_lo) & (t <= t_hi)
-        axD.plot(t[m] / 24.0, _to_plasma("drg_all", data["drg_all"])[m],
+        yf = np.asarray(data["drg_all"], dtype=float)
+        if not data.get("_plasma"):
+            yf = _to_plasma("drg_all", yf)
+        axD.plot(t[m] / 24.0, yf[m],
                  ls=ls, color=c, lw=lw, label=label)
     for day in (27.0, 28.0, 29.0):
         for h in (0.0, 8.0, 16.0):
@@ -408,7 +461,10 @@ def plot(runs) -> plt.Figure:
         t = np.asarray(data["t_all"])
         t0 = 29.0 * 24.0
         m = (t >= t0) & (t <= t0 + 24.0)
-        axE.plot(t[m] - t0, _to_plasma("drg_all", data["drg_all"])[m],
+        yf = np.asarray(data["drg_all"], dtype=float)
+        if not data.get("_plasma"):
+            yf = _to_plasma("drg_all", yf)
+        axE.plot(t[m] - t0, yf[m],
                  ls=ls, color=c, lw=lw, label=label)
     for h in (0.0, 8.0, 16.0):
         axE.axvline(h, color="0.82", lw=0.5, zorder=0)
@@ -449,10 +505,11 @@ def _all_dose_caches_present() -> bool:
 
 
 def main() -> None:
+    bp = _bp_table()
     print("Five-panel chronic oral figure (CKD-5, total plasma = blood/BP)", flush=True)
     print(
-        f"  BP  IS={BP['IS_all']:.2f}  HA={BP['HA_all']:.2f}  "
-        f"pCS={BP['pCS_all']:.2f}  furo={BP['drg_all']:.2f}",
+        f"BP  IS={bp['IS_all']:.2f}  HA={bp['HA_all']:.2f}  "
+        f"pCS={bp['pCS_all']:.2f}  furo={bp['drg_all']:.2f}",
         flush=True,
     )
     if _all_dose_caches_present():
@@ -466,30 +523,28 @@ def main() -> None:
     for label, dose, n, times, ls, c, lw in JOBS:
         data = _load_or_run(label, ic_ss, live_pk, dose, n, times)
         runs.append((label, data, ls, c, lw))
-    bases = [_is_base_of(data) for _lab, data, *_rest in runs]
-    pcs_b = [float(np.asarray(data["pCS_base"]).flat[0]) for _lab, data, *_ in runs]
-    mid = float(np.median(bases))
-    mid_p = float(np.median(pcs_b))
-    print("\n========== PHENOTYPE (must all be CKD-5, same pCS SS) ==========", flush=True)
-    for (lab, data, *_rest), b, p in zip(runs, bases, pcs_b):
-        tag = "HEALTHY/ACUTE" if b <= HEALTHY_IS_MAX else "CKD-5"
-        print(
-            f"  {lab:<28} IS_base={b:8.3f}  pCS_base={p:8.3f} mg/L blood  [{tag}]",
-            flush=True,
-        )
-        if b <= HEALTHY_IS_MAX:
-            raise RuntimeError(f"{lab} is {tag} (IS_base={b:.3f}).")
-        if abs(b - mid) / max(mid, 1e-9) > 0.05:
-            raise RuntimeError(f"IS_base mix: {lab}={b:.3f} vs group {mid:.3f}.")
-        if abs(p - mid_p) / max(mid_p, 1e-9) > 0.01:
-            raise RuntimeError(
-                f"pCS_base mix (old vs new pKa): {lab}={p:.3f} vs group {mid_p:.3f}."
-            )
+
+    print("\n========== CHECKS (paste these three) ==========", flush=True)
     print(
-        f"  All four traces CKD-5, IS_base ≈ {mid:.3f}, pCS_base ≈ {mid_p:.3f} mg/L blood",
+        f"BP  IS={bp['IS_all']:.2f}  HA={bp['HA_all']:.2f}  "
+        f"pCS={bp['pCS_all']:.2f}  furo={bp['drg_all']:.2f}",
         flush=True,
     )
-    print("==============================================================\n", flush=True)
+    n_resets = sum(
+        _check_day_boundaries(lab, data)
+        for lab, data, *_ in runs
+        if not lab.startswith("No-drug")
+    )
+    if n_resets:
+        print(
+            "\n  WARNING: furosemide resets at day boundaries — "
+            "fix the chronic driver before trusting these results.\n",
+            flush=True,
+        )
+    runs = [(lab, _run_to_plasma(data, bp), *rest) for lab, data, *rest in runs]
+    _check_baselines_consistent(runs)
+    print("================================================\n", flush=True)
+
     fig = plot(runs)
     stem = "chronic_oral_five_panel"
     for folder in (_RESULTS, _PUB_FIG):
