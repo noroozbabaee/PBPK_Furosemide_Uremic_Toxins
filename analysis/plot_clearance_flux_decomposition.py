@@ -51,6 +51,8 @@ _RESULTS = os.path.join(_ROOT, "results")
 _PUB_FIG = os.path.join(_ROOT, "publication_code", "Figures")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
 
 from simulation import run_sim
 from scenario_manager import set_scenario
@@ -68,7 +70,7 @@ import compound_parameters as CP
 DURATION_SS_H   = 1500.0
 DURATION_MAIN_H = 12.0
 CKD_SCALE       = 0.10
-TIME_WINDOW     = (6.0, 12.0)
+TIME_WINDOW     = (0.0, 12.0)
 
 # REMOVED: CP.set_ckd_vmax_scales(baso_scale=0.15, apical_scale=0.40)
 # REMOVED: _ = CP.get_compound_parameters("ckd5")
@@ -381,7 +383,7 @@ def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
         ("basolateral_uptake",  "C"),
         ("apical_secretion",    "D"),
     ]
-    fig, axes = plt.subplots(2, 2, figsize=(6.27, 5.4))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 7.6))
     fig.patch.set_facecolor("white")
     axes = axes.ravel()
     xtick_labels = [DISPLAY_NAME.get(sp, sp) for sp in species]
@@ -405,7 +407,7 @@ def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
         ax.text(
             0.02, 0.95, letter,
             transform=ax.transAxes,
-            fontsize=14, fontweight="bold", va="top", ha="left",
+            fontsize=16, fontweight="bold", va="top", ha="left",
         )
         handles = []
         for j, sc in enumerate(scenarios):
@@ -424,9 +426,9 @@ def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
         fig.legend(
             handles_for_legend, scenarios,
             loc="lower center", ncol=min(4, len(scenarios)),
-            frameon=False, fontsize=9,
+            frameon=False, fontsize=12,
             bbox_to_anchor=(0.5, -0.02),
-            columnspacing=1.4, handlelength=1.8,
+            columnspacing=2.2, handlelength=2.6,
         )
     fig.tight_layout(rect=[0, 0.10, 1, 1])
     if outpath:
@@ -477,22 +479,31 @@ def reach_steady_state():
 
 
 def run_main_scenarios(sol_H_ss, sol_C_ss):
+    """Run each 12 h arm and score fluxes immediately (live compound dicts).
+
+    Do not wait until all four ODEs finish: compute_fluxes reads C.tox1 Vmax
+    from globals. After a CKD-5 run those globals stay CKD-scaled, so a
+    later loop over healthy trajectories reused CKD Vmax (uptake:apical 1:3).
+    """
     scenarios = {
-        "Healthy No Furosemide":  dict(scenario_name="H_NO_DRUG",      mode="healthy", ic=_ic_from_solution(sol_H_ss)),
-        "Healthy With Furosemide":dict(scenario_name="H_WITH_DRUG",    mode="healthy", ic=_ss_to_drug_start_ic(sol_H_ss)),
-        "CKD-5 No Furosemide":    dict(scenario_name="CKD_NO_DRUG",    mode="ckd5",    ic=_ic_from_solution(sol_C_ss)),
-        "CKD-5 With Furosemide":  dict(scenario_name="CKD_WITH_DRUG",  mode="ckd5",    ic=_ss_to_drug_start_ic(sol_C_ss)),
+        "Healthy No Furosemide":   dict(scenario_name="H_NO_DRUG",     mode="healthy", ic=_ic_from_solution(sol_H_ss)),
+        "Healthy With Furosemide": dict(scenario_name="H_WITH_DRUG",   mode="healthy", ic=_ss_to_drug_start_ic(sol_H_ss)),
+        "CKD-5 No Furosemide":     dict(scenario_name="CKD_NO_DRUG",   mode="ckd5",    ic=_ic_from_solution(sol_C_ss)),
+        "CKD-5 With Furosemide":   dict(scenario_name="CKD_WITH_DRUG", mode="ckd5",    ic=_ss_to_drug_start_ic(sol_C_ss)),
     }
-    solutions = {}
-    meta      = {}
+    solutions, meta, flux = {}, {}, {}
     for label, sc in scenarios.items():
         print(f"\n▶ Running {label} ({DURATION_MAIN_H:.1f} h from SS)")
         set_scenario(sc["scenario_name"])
         sol = run_sim(DURATION_MAIN_H, custom_initial_conds=sc["ic"],
                       mode=sc["mode"], reset_compounds=False)
+        flux[label] = compute_fluxes_for_scenario_drug(
+            sol, mode=sc["mode"], time_window=TIME_WINDOW, include_drug=True)
+        print(f"    IS Vmax_baso = {C.tox1.get('Vmax_baso_uptake', float('nan')):.4g}   "
+              f"IS fu_p = {C.tox1.get('fu_p', float('nan')):.3f}")
         solutions[label] = sol
-        meta[label]      = {"mode": sc["mode"], "scenario_name": sc["scenario_name"]}
-    return solutions, meta
+        meta[label] = {"mode": sc["mode"], "scenario_name": sc["scenario_name"]}
+    return solutions, meta, flux
 
 
 # ---------------------------------------------------------------------
@@ -504,41 +515,29 @@ def main() -> Dict[str, object]:
     outdir = _timestamp_dir(os.path.join(_RESULTS, "flux_decomposition"))
 
     sol_H_ss, sol_C_ss = reach_steady_state()
-    solutions, meta    = run_main_scenarios(sol_H_ss, sol_C_ss)
+    solutions, meta, flux_data_all = run_main_scenarios(sol_H_ss, sol_C_ss)
 
-    flux_data_all = {}
-    for name, sol in solutions.items():
-        flux_data_all[name] = compute_fluxes_for_scenario_drug(
-            sol, mode=meta[name]["mode"],
-            time_window=TIME_WINDOW, include_drug=True)
-
-    fig_tox = plot_flux_panels(flux_data_all, species=("IS", "HA", "pCS"),
-        title=f"Renal flux decomposition (PBUTs) — mean over t in [{TIME_WINDOW[0]}, {TIME_WINDOW[1]}] h")
+    fig_tox = plot_flux_panels(flux_data_all, species=("IS", "pCS", "HA"))
     _save(fig_tox, outdir, "09_flux_decomposition_PBUTs_greyscale")
+    fig4 = os.path.join(_PUB_FIG, "Fig4.pdf")
+    fig_tox.savefig(
+        fig4, dpi=300, bbox_inches="tight", pad_inches=0.04,
+        facecolor="white", edgecolor="none",
+    )
+    print(f"  Saved {fig4}")
 
-    fig_drg = plot_flux_panels(flux_data_all, species=("DRUG",),
-        title=f"Renal flux decomposition (Furosemide) — mean over t in [{TIME_WINDOW[0]}, {TIME_WINDOW[1]}] h")
+    fig_drg = plot_flux_panels(flux_data_all, species=("DRUG",))
     _save(fig_drg, outdir, "10_flux_decomposition_furosemide_greyscale")
 
-    fig_all = plot_flux_panels(flux_data_all, species=("DRUG", "IS", "HA", "pCS"),
-        title=f"Renal flux decomposition (all) — mean over t in [{TIME_WINDOW[0]}, {TIME_WINDOW[1]}] h")
+    fig_all = plot_flux_panels(flux_data_all, species=("DRUG", "IS", "pCS", "HA"))
     _save(fig_all, outdir, "11_flux_decomposition_all_greyscale")
 
-    print("\n=== Flux contribution (%) — absolute magnitudes ===")
-    for scen_name, flx in flux_data_all.items():
-        print(f"\n{scen_name}")
-        contrib = compute_flux_contributions_percent(flx, species=("IS", "HA", "pCS", "DRUG"))
-        for sp in ("IS", "HA", "pCS", "DRUG"):
-            c = contrib[sp]
-            print(f"  {DISPLAY_NAME.get(sp, sp)}: "
-                  f"Filt={c['filtration']:.1f}%, "
-                  f"Pass={c['basolateral_passive']:.1f}%, "
-                  f"Uptake={c['basolateral_uptake']:.1f}%, "
-                  f"Apical={c['apical_secretion']:.1f}%")
+    from flux_export import export_flux_results
+    export_flux_results(flux_data_all, outdir, TIME_WINDOW, pub_dir=_PUB_FIG)
 
     print("\nFigures saved to:", outdir)
     return {"solutions": solutions, "flux_data_all": flux_data_all,
-            "healthy_ss": sol_H_ss, "ckd_ss": sol_C_ss, "outdir": outdir}
+            "healthy_ss": sol_H_ss, "ckd_ss": sol_C_ss, "outdir": outdir, "meta": meta}
 
 
 if __name__ == "__main__":
