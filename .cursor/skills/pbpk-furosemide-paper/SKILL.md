@@ -98,7 +98,7 @@ Gitignores `results/*`. **Keep local NPZs**; they are not on GitHub.
 | Time-course 2×2 check of three doses | `analysis/compare_dosing_regimens_grey_HA_ADDED.py` |
 | 240 mg QD and 240×3 TID caches | `analysis/run_240mg_qd_and_tid.py` |
 | Figure 3 Healthy/CKD-5 2×2 bars | `figures/combine_bar_figures_vector.py` or `figures/make_bars_healthy_ckd_combined.py` |
-| Flux decomposition | `analysis/plot_clearance_flux_decomposition.py` |
+| Figure 4 flux (corrected) | `analysis/plot_clearance_flux_decomposition.py` — skill `.cursor/skills/figure4-flux-decomposition/SKILL.md`. Output `publication_code/Figures/Fig4.pdf`. Never reuse deleted `09_flux_decomposition_PBUTs_greyscale` |
 
 Style: **Times New Roman** (Liberation Serif fallback on Linux), two-line y-labels, no top/right spines.  
 PDF: `bbox_inches="tight"`, `pad_inches=0.04` via `_save_fig` — do not leave a letter-page of white.  
