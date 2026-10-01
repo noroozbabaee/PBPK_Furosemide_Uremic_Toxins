@@ -81,7 +81,9 @@ Insert `publication_code/Figures/chronic_oral_furosemide_24h_cycle_ppt_legend.pn
 |---|---|
 | `Figures/Fig4.pdf` | `analysis/plot_clearance_flux_decomposition.py` |
 
-Do **not** use the old `09_flux_decomposition_PBUTs_greyscale.{pdf,png}` (removed). Those scored healthy bars with leftover CKD-5 \(V_{\max}\).
+X-axis **IS, HA, pCS** (pCS last). Do not swap.
+
+A fresh run also writes `Figures/09_flux_decomposition_PBUTs_greyscale.{pdf,png}` (same bars as Fig4). Ignore any older 09_ from before immediate Vmax scoring.
 
 Legend: Healthy / CKD-5 × No Furosemide / With Furosemide (not “Drug”).
 
