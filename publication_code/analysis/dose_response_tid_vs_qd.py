@@ -142,7 +142,9 @@ KM_pCS = 22.58  # mg/L — Watanabe H et al. Kidney Int 2014;86:840
 FU_P_IS = 0.10  # Deltombe O et al. Toxins 2015;7:3933 (CKD-5)
 FU_P_pCS = 0.05  # Deltombe O et al. Toxins 2015;7:3933 (CKD-5)
 BP_IS = 0.70  # from compound_parameters.py
+BP_HA = 0.84
 BP_pCS = 0.55  # from compound_parameters.py
+FU_P_HA = 0.52
 
 # Clinical reference values — literature constants (correct to hardcode)
 CLIN_IS_PCT = 31.9  # % — Costes-Albrespic 2025
@@ -385,8 +387,22 @@ def extract_baseline_pk(ic_ss: dict) -> dict:
     t_nd = sol_nd.t
 
     live_pk = {"CL_FURO": CL_FURO_live}
+    try:
+        import physiology as _phys
+        GFR_CKD5 = float(_phys.make_phys(MODE).get("Q_GFR", 0.72))
+    except Exception:
+        GFR_CKD5 = 0.72
+    fu_by_tox = {"IS": FU_P_IS, "HA": FU_P_HA, "pCS": FU_P_pCS}
+
+    def _foat_gfr(name, cl_r, bp):
+        cl_gfr = GFR_CKD5 * fu_by_tox[name] / bp
+        fo = max(0.0, min(0.99, 1.0 - cl_gfr / cl_r)) if cl_r > 1e-6 else 0.6
+        print(f"  [INFO] {name}: F_OAT1 from Q_GFR={GFR_CKD5:.3f} L/h = {fo:.3f}")
+        return fo
+
     toxin_map = [
         ("IS", "C_tox1_cen", "Ae_t1", "F_flux_OAT1_IS", BP_IS, "CL_R_IS", "F_OAT1_IS"),
+        ("HA", "C_tox2_cen", "Ae_t2", "F_flux_OAT1_HA", BP_HA, "CL_R_HA", "F_OAT1_HA"),
         ("pCS", "C_tox3_cen", "Ae_t3", "F_flux_OAT1_pCS", BP_pCS, "CL_R_pCS", "F_OAT1_pCS"),
     ]
 
@@ -394,9 +410,9 @@ def extract_baseline_pk(ic_ss: dict) -> dict:
         i_c = IDX.get(c_key)
         i_ae = IDX.get(ae_key)
         if i_c is None or i_ae is None:
-            print(f"  [WARN] {name}: indices not found — using fallback")
-            live_pk[cl_key] = 0.274 if name == "IS" else 0.086
-            live_pk[foat_out_key] = 0.631 if name == "IS" else 0.562
+            print(f"  [WARN] {name}: indices not found — using Table 1 CL_R")
+            live_pk[cl_key] = {"IS": 0.20, "HA": 0.49, "pCS": 0.08}[name]
+            live_pk[foat_out_key] = _foat_gfr(name, live_pk[cl_key], bp)
             continue
 
         C_tox = np.clip(sol_nd.y[i_c], 0, np.inf)
@@ -412,25 +428,22 @@ def extract_baseline_pk(ic_ss: dict) -> dict:
             # Average OAT1 fraction over simulation
             foat_vals = sol_nd.y[i_foat]
             foat_vals = foat_vals[foat_vals >= 0]
-            live_pk[foat_out_key] = float(np.mean(foat_vals)) if len(foat_vals) > 0 else \
-                (0.631 if name == "IS" else 0.562)
+            live_pk[foat_out_key] = (
+                float(np.mean(foat_vals)) if len(foat_vals) > 0
+                else _foat_gfr(name, CL_R, bp)
+            )
         else:
-            # Fallback: estimate from GFR
-            # CL_GFR = GFR_CKD5 × fu_p / BP (GFR_CKD5 ~ 0.1 L/h in our model)
-            # F_OAT1 = 1 - CL_GFR / CL_R
-            GFR_CKD5 = 0.1  # L/h approximate
-            CL_GFR = GFR_CKD5 * (FU_P_IS if name == "IS" else FU_P_pCS) / bp
-            F_OAT1 = max(0.0, min(0.99, 1.0 - CL_GFR / CL_R)) if CL_R > 1e-6 else 0.6
-            live_pk[foat_out_key] = F_OAT1
-            print(f"  [INFO] {name}: F_OAT1 estimated from GFR = {F_OAT1:.3f}")
+            live_pk[foat_out_key] = _foat_gfr(name, CL_R, bp)
 
     print(f"\n  LIVE PK VALUES (from ODE, no hardcoding):")
     print(f"  {'Parameter':<18} {'Value':>10}  {'Units'}")
     print("  " + "─" * 45)
-    print(f"  {'CL_FURO':<18} {live_pk['CL_FURO']:>10.4f}  L/h")
-    print(f"  {'CL_R_IS':<18} {live_pk['CL_R_IS']:>10.4f}  L/h")
+    print(f"  {'CL_FURO':<18} {live_pk['CL_FURO']:>10.4f}  L/h plasma")
+    print(f"  {'CL_R_IS':<18} {live_pk['CL_R_IS']:>10.4f}  L/h plasma")
     print(f"  {'F_OAT1_IS':<18} {live_pk['F_OAT1_IS']:>10.4f}  —")
-    print(f"  {'CL_R_pCS':<18} {live_pk['CL_R_pCS']:>10.4f}  L/h")
+    print(f"  {'CL_R_HA':<18} {live_pk['CL_R_HA']:>10.4f}  L/h plasma")
+    print(f"  {'F_OAT1_HA':<18} {live_pk['F_OAT1_HA']:>10.4f}  —")
+    print(f"  {'CL_R_pCS':<18} {live_pk['CL_R_pCS']:>10.4f}  L/h plasma")
     print(f"  {'F_OAT1_pCS':<18} {live_pk['F_OAT1_pCS']:>10.4f}  —")
     return live_pk
 
@@ -606,14 +619,16 @@ def _analytical_ss_core(IS_base: float, pCS_base: float,
     entry points that use this core with each Css_furo source.
 
     Formula:
-        Cu_furo  = Css_furo × fu_p / BP
+        Cu_furo  = Css_furo_plasma × fu_p     (Css from Ae/AUC_plasma; no extra /BP)
         alpha    = 1 + Cu_furo / Ki
         s        = (Km + Cu_tox) / (alpha × Km + Cu_tox)
         CL_R_new = CL_GFR + CL_OAT1 × s
                  = CL_R × (1 - F_OAT1) + CL_R × F_OAT1 × s
         %change  = (CL_R / CL_R_new - 1) × 100
     """
-    Cu_furo = Css_furo * FU_P_FURO / BP_FURO
+    # CL_FURO is plasma CL (Ae/∫(C_ven/BP)dt), so Css_furo is plasma.
+    # ODE unbound conc. is C_plasma × fu_p = Css_plasma × fu_p (no extra /BP).
+    Cu_furo = Css_furo * FU_P_FURO
     alpha = 1.0 + Cu_furo / Ki
 
     results = {}

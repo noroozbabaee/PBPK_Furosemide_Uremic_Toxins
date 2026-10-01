@@ -30,7 +30,7 @@ for p in (_SRC_DIR, _THIS_DIR):
         sys.path.insert(0, p)
 
 from heatmap_analytical_formulas import (
-    css_furo_theoretical, mm_pct, KI_DEFAULT, FU_P, BP, DOSE_PER_DAY,
+    css_furo_theoretical, mm_pct, KI_DEFAULT, FU_P, BP, f_oat1_from_gfr,
 )
 from heatmap_ki_vmax_engine import (
     _force_ki, _set_vmax, _warmup_ic, _run_chronic_oral,
@@ -68,11 +68,11 @@ def _fallback_live_pk(vmax_scale: float) -> dict:
     return {
         "CL_FURO": 1.70,
         "CL_R_IS": 0.20,
-        "F_OAT1_IS": min(0.95, 0.63 * s / (0.37 + 0.63 * s)),
+        "F_OAT1_IS": f_oat1_from_gfr(0.20, FU_P["IS"], BP["IS"]),
         "CL_R_HA": 0.49,
-        "F_OAT1_HA": min(0.95, 0.70 * s / (0.30 + 0.70 * s)),
+        "F_OAT1_HA": f_oat1_from_gfr(0.49, FU_P["HA"], BP["HA"]),
         "CL_R_pCS": 0.08,
-        "F_OAT1_pCS": min(0.95, 0.56 * s / (0.44 + 0.56 * s)),
+        "F_OAT1_pCS": f_oat1_from_gfr(0.08, FU_P["pCS"], BP["pCS"]),
         "IS_base_blood": 28.16 * 0.70,
         "HA_base_blood": 142.86 * 0.84,
         "pCS_base_blood": 24.99 * 0.55,

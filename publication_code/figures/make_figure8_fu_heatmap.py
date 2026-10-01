@@ -31,31 +31,78 @@ _ROOT = (
     else _PARENT
 )
 _ANALYSIS = os.path.join(_ROOT, "analysis")
+_SRC = os.path.join(_ROOT, "src")
 _RESULTS = os.path.join(_ROOT, "results")
 _PUB_FIG = os.path.join(_ROOT, "publication_code", "Figures")
 os.makedirs(_RESULTS, exist_ok=True)
 os.makedirs(_PUB_FIG, exist_ok=True)
-if _ANALYSIS not in sys.path:
-    sys.path.insert(0, _ANALYSIS)
+for _p in (_SRC, _ANALYSIS):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from heatmap_analytical_formulas import (  # noqa: E402
     BP, FU_P, css_furo_theoretical, mm_pct, CSS_PLASMA_TABLE1,
+    CL_R_TABLE1, f_oat1_from_gfr, q_gfr_ckd5,
 )
-
-# Table 1 CKD-5 residual CL and typical OAT1 fractions (live ODE if you
-# re-extract; these match the analytical maps used in the paper draft).
-LIVE = {
-    "IS":  {"CL_R": 0.20, "F_OAT1": 0.631},
-    "HA":  {"CL_R": 0.49, "F_OAT1": 0.70},
-    "pCS": {"CL_R": 0.08, "F_OAT1": 0.562},
-}
-CL_FURO = 1.70
-CSS_FURO = css_furo_theoretical(CL_FURO)
 
 N = 80
 FU_DRUG = np.linspace(0.01, 0.13, N)
 FU_MULT = np.linspace(0.30, 2.00, N)
-PANELS = ("IS", "pCS", "HA")  # paper order A IS, B pCS, C HA
+PANELS = ("IS", "pCS", "HA")
+
+
+def _scalar(cache, key, default=None):
+    if key not in cache.files:
+        return default
+    return float(np.asarray(cache[key]).reshape(-1)[0])
+
+
+def _load_live():
+    """Prefer a CKD-5 chronic NPZ (CL_FURO, CL_R, blood baselines)."""
+    qg = q_gfr_ckd5()
+    live = {
+        "CL_FURO": 1.70,
+        "source": "Table 1 + Q_GFR (no chronic NPZ)",
+        "IS_blood": CSS_PLASMA_TABLE1["IS"] * BP["IS"],
+        "HA_blood": CSS_PLASMA_TABLE1["HA"] * BP["HA"],
+        "pCS_blood": CSS_PLASMA_TABLE1["pCS"] * BP["pCS"],
+        "CL_R": dict(CL_R_TABLE1),
+        "Q_GFR": qg,
+    }
+    search = []
+    for folder in (_RESULTS, os.path.join(_ROOT, "publication_code", "results")):
+        if os.path.isdir(folder):
+            for name in os.listdir(folder):
+                if name.endswith(".npz") and "chronic" in name.lower():
+                    search.append(os.path.join(folder, name))
+    search.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    for path in search:
+        try:
+            z = np.load(path, allow_pickle=False)
+        except Exception:
+            continue
+        is0 = _scalar(z, "IS_base")
+        if is0 is None or not (8.0 <= is0 <= 80.0):
+            continue
+        cl = _scalar(z, "CL_FURO")
+        if cl is None or cl < 0.2:
+            continue
+        live["CL_FURO"] = cl
+        live["source"] = os.path.basename(path)
+        live["IS_blood"] = is0
+        live["pCS_blood"] = _scalar(z, "pCS_base", live["pCS_blood"])
+        live["HA_blood"] = _scalar(z, "HA_base", live["HA_blood"])
+        for tox, key in (("IS", "CL_R_IS"), ("HA", "CL_R_HA"), ("pCS", "CL_R_pCS")):
+            v = _scalar(z, key)
+            if v is not None and v > 0:
+                live["CL_R"][tox] = v
+        print(f"  live PK from {live['source']}")
+        print(f"  CL_FURO={live['CL_FURO']:.4f} L/h plasma  "
+              f"IS_base_blood={live['IS_blood']:.3f}")
+        break
+    else:
+        print(f"  [warn] {live['source']}")
+    return live
 
 
 def _flux_style() -> None:
@@ -82,28 +129,43 @@ def _flux_style() -> None:
     })
 
 
-def _grid_pct(toxin: str) -> np.ndarray:
-    css_blood = CSS_PLASMA_TABLE1[toxin] * BP[toxin]
-    cl_r = LIVE[toxin]["CL_R"]
-    f_oat = LIVE[toxin]["F_OAT1"]
+def _grid_pct(toxin: str, live: dict, css_furo: float) -> np.ndarray:
+    css_blood = {"IS": live["IS_blood"], "HA": live["HA_blood"],
+                 "pCS": live["pCS_blood"]}[toxin]
+    cl_r0 = live["CL_R"][toxin]
     fu0 = FU_P[toxin]
+    bp = BP[toxin]
+    qg = live["Q_GFR"]
+    cl_gfr0 = qg * fu0 / bp
+    cl_oat0 = max(cl_r0 - cl_gfr0, 0.0)
     z = np.empty((len(FU_MULT), len(FU_DRUG)))
     for i, m in enumerate(FU_MULT):
+        fu_t = float(fu0 * m)
+        cl_gfr = qg * fu_t / bp
+        cl_r = cl_gfr + cl_oat0
+        f_oat = cl_oat0 / cl_r if cl_r > 1e-12 else 0.0
         for j, fu_d in enumerate(FU_DRUG):
             z[i, j] = mm_pct(
-                css_blood, cl_r, f_oat, toxin, CSS_FURO,
-                fu_p_furo=float(fu_d), fu_p_tox=float(fu0 * m),
+                css_blood, cl_r, f_oat, toxin, css_furo,
+                fu_p_furo=float(fu_d), fu_p_tox=fu_t,
             )["pct"]
     return z
 
 
 def main() -> None:
     _flux_style()
-    grids = {t: _grid_pct(t) for t in PANELS}
-    print(f"Css_furo = {CSS_FURO:.3f} mg/L blood  (F=0.60, 240 mg/d, CL={CL_FURO})")
+    live = _load_live()
+    css_furo = css_furo_theoretical(live["CL_FURO"])
+    print(f"Css_furo = {css_furo:.3f} mg/L plasma  "
+          f"(F=0.60, 240 mg/d, CL={live['CL_FURO']:.4f})")
+    print(f"Q_GFR CKD-5 = {live['Q_GFR']:.3f} L/h")
+    for t in PANELS:
+        fo = f_oat1_from_gfr(live["CL_R"][t], FU_P[t], BP[t], live["Q_GFR"])
+        print(f"  {t}: CL_R={live['CL_R'][t]:.4f}  F_OAT1(base)={fo:.3f}")
+    grids = {t: _grid_pct(t, live, css_furo) for t in PANELS}
     for t in PANELS:
         g = grids[t]
-        print(f"  {t}: {np.nanmin(g):+.2f} to {np.nanmax(g):+.2f} %")
+        print(f"  {t} map: {np.nanmin(g):+.2f} to {np.nanmax(g):+.2f} %")
 
     # Same canvas width as flux 2×2 (12 in); one row of three panels.
     fig = plt.figure(figsize=(12, 3.9), dpi=300)
