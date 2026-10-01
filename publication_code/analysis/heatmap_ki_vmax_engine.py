@@ -1,27 +1,31 @@
 # -*- coding: utf-8 -*-
-"""Ki × Vmax ODE heatmap engine (IV single-dose or chronic oral).
+"""
+heatmap_ki_vmax_engine.py
+=========================
+Single source of truth for the Ki × Vmax sensitivity grid.
+Replaces run_ckd_simulation() / compute_heatmap() in heatmap_ki_vmax_fixed_v4.py.
 
-This is NOT manuscript Fig 7 by default. Fig 7 in the paper is the
-analytical chronic map (heatmap_ki_vmax_analytical.pdf), which is not
-in this git tree.
+This is NOT manuscript Fig 7 by default. Fig 7 is the analytical chronic map
+(heatmap_ki_vmax_analytical.pdf), which is not in this git tree.
 
-SCENARIO
-  "iv_single"     1000 h no-drug warm-up once per Vmax row, then 24 h
-                  no-drug + 24 h IV 120 mg / 2 h. Outcome: %Δ of total
-                  blood C_tox*_cen at t = 24 h (same % as plasma).
-  "chronic_oral"  same warm-up, then dose_response_tid_vs_qd._run_simulation
-                  TID 80 mg × 3, 30 days. Outcome: last-cycle mean vs
-                  warm-up baseline.
+What changed vs v4 (same IV physics, same outcome definition):
+  1. ROW-WISE: the warm-up and the no-drug reference do not depend on Ki
+     (no drug → no inhibition), so they run ONCE per Vmax row.
+  2. ALL THREE TOXINS per run: IS, HA and pCS (v4 re-ran IS and pCS separately
+     and had no HA).
+  3. Vmax scale applied to IS, HA and pCS basolateral OAT1.
+  4. STALE-CACHE: fingerprint of live CKD-5 compound dicts including
+     pKa-derived TOX*_PASS / DRG_PASS.
+  5. Global CKD scales are restored after the grid.
 
-Ki does not affect the no-drug warm-up; that run is shared across each
-Vmax row. All three toxins are read from every ODE run.
+C_tox*_cen is total blood. BP cancels in %Δ. Do not label a single-dose
+map ΔC_ss. Vmax axis = fraction of *healthy* baso OAT1 Vmax.
 
-Vmax_scale replaces the CKD-5 basolateral OAT1 scale (default 0.05).
-It is a fraction of the *healthy* Vmax, not “relative to CKD-5”.
-_CKD_SCALES is restored after each row.
-
-C_tox*_cen is total blood (mg/L). Divide by BP for plasma. %Δ is
-identical. Do not call a single-dose map ΔC_ss.
+Scenarios:
+  "single_iv"    : 120 mg IV / 2 h; %Δ of total conc. at t = SIM_HOURS
+                   (aliases: "iv_single")
+  "chronic_oral" : dose_response_tid_vs_qd._run_simulation, TID 80×3, 30 d;
+                   last-cycle mean vs warm-up baseline.
 """
 from __future__ import annotations
 
@@ -32,13 +36,9 @@ import os
 import pickle
 import sys
 import time
-import warnings
-from contextlib import contextmanager
-from typing import Any, Dict, Optional
+from typing import Dict, Optional, Sequence, Tuple
 
 import numpy as np
-
-warnings.filterwarnings("ignore")
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _SRC_DIR = os.path.join(_THIS_DIR, "..", "src")
@@ -47,111 +47,114 @@ if _SRC_DIR not in sys.path:
 
 OUTDIR = os.path.join(_THIS_DIR, "..", "results")
 os.makedirs(OUTDIR, exist_ok=True)
+CACHE_FILE = os.path.join(OUTDIR, "heatmap_ki_vmax_engine_cache.pkl")
 
-# Default = supplementary IV map. Chronic ODE grid is opt-in (expensive).
-SCENARIO = os.environ.get("HEATMAP_SCENARIO", "iv_single")
-
-SIM_HOURS = 24.0
 WARMUP_H = 1000.0
-DRIFT_WARN = 0.02
+SIM_HOURS = 24.0
+DT_WARMUP = 0.5
+DT_SIM = 0.1
 DOSE_MG = 120.0
 INFUSION_H = 2.0
-DT_SIM = 0.1
-DT_WARMUP = 0.5
 
-TOXIN_KEYS = {
-    "IS": "C_tox1_cen",
-    "HA": "C_tox2_cen",
-    "pCS": "C_tox3_cen",
+N_KI, N_VMAX = 15, 12
+Ki_grid = np.logspace(np.log10(0.05), np.log10(5.0), N_KI)
+Vmax_grid = np.linspace(0.01, 0.30, N_VMAX)
+
+TOXINS = {
+    "IS": ("tox1", "C_tox1_cen"),
+    "HA": ("tox2", "C_tox2_cen"),
+    "pCS": ("tox3", "C_tox3_cen"),
 }
-TOXIN_BP = {"IS": 0.70, "HA": 0.84, "pCS": 0.55}
-
-N_KI = 15
-N_VMAX = 12
-KI_MIN, KI_MAX = 0.05, 5.0
-VMAX_MIN, VMAX_MAX = 0.01, 0.30
-Ki_grid = np.logspace(np.log10(KI_MIN), np.log10(KI_MAX), N_KI)
-Vmax_grid = np.linspace(VMAX_MIN, VMAX_MAX, N_VMAX)
-
-CACHE_FILE = os.path.join(OUTDIR, "heatmap_ki_vmax_engine.pkl")
+KI_KEYS = {
+    "tox1": "Ki_furo_to_IS_mgL",
+    "tox2": "Ki_furo_to_HA_mgL",
+    "tox3": "Ki_furo_to_pCS_mgL",
+}
+_DOSING_KEYS = {"enabled", "IR", "t_start_h", "t_inf_h", "bolus_mg", "inhibit"}
+SCENARIO = os.environ.get("HEATMAP_SCENARIO", "single_iv")
 
 
-def _compound_fingerprint() -> str:
+def _norm_scenario(scenario: str) -> str:
+    if scenario in ("iv_single", "single_iv", "iv"):
+        return "single_iv"
+    return scenario
+
+
+def _set_vmax_scale(scale: float) -> None:
+    """CKD-5 basolateral OAT1 Vmax as a fraction of healthy, all toxins."""
     import compound_parameters as CP
-    payload = {}
-    for name in ("TOX1_BASE", "TOX2_BASE", "TOX3_BASE", "DRUG_BASE"):
-        d = getattr(CP, name, {})
-        if not isinstance(d, dict):
-            continue
-        payload[name] = {
-            k: d[k]
-            for k in sorted(d)
-            if isinstance(d[k], (int, float, str, bool))
-        }
-    raw = json.dumps(payload, sort_keys=True, default=str)
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
-
-
-def _force_ki(ki_value: float) -> None:
-    import compounds as C
-    for tox, key in (
-        (C.tox1, "Ki_furo_to_IS_mgL"),
-        (C.tox2, "Ki_furo_to_HA_mgL"),
-        (C.tox3, "Ki_furo_to_pCS_mgL"),
-    ):
-        if isinstance(tox, dict):
-            tox[key] = float(ki_value)
-
-
-def _set_vmax_scale(vmax_scale: float) -> None:
-    """Apply the same healthy-fraction scale to IS, HA, and pCS baso Vmax."""
-    import compound_parameters as CP
-    for tox in ("IS", "HA", "pCS"):
-        CP._CKD_SCALES["per_compound"][tox]["baso"] = float(vmax_scale)
+    for tox in TOXINS:
+        CP._CKD_SCALES["per_compound"][tox]["baso"] = float(scale)
     CP.CKD_ADJUSTMENTS = CP._create_ckd_adjustments_dynamic(CP._CKD_SCALES)
 
 
-def _set_vmax(vmax_scale: float) -> None:
-    """Alias used by the validation script."""
-    _set_vmax_scale(vmax_scale)
+def _set_vmax(scale: float) -> None:
+    _set_vmax_scale(scale)
 
 
-@contextmanager
-def vmax_scale_ctx(vmax_scale: float):
-    import compound_parameters as CP
-    saved = copy.deepcopy(CP._CKD_SCALES)
-    try:
-        _set_vmax_scale(vmax_scale)
-        yield
-    finally:
-        CP._CKD_SCALES = saved
-        CP.CKD_ADJUSTMENTS = CP._create_ckd_adjustments_dynamic(CP._CKD_SCALES)
+def _force_ki(*args) -> None:
+    """_force_ki(ki) or _force_ki(C, ki)."""
+    if len(args) == 1:
+        import compounds as C
+        ki = args[0]
+    else:
+        C, ki = args[0], args[1]
+    for attr, key in KI_KEYS.items():
+        d = getattr(C, attr, None)
+        if isinstance(d, dict):
+            d[key] = float(ki)
 
 
-def _ic_from_sol(sol) -> dict:
-    from state_vector import IDX
-    ic = {name: float(sol.y[idx, -1]) for name, idx in IDX.items()}
-    for k in list(ic):
-        if k.startswith("Ae_"):
-            ic[k] = 0.0
-    return ic
+def _drug_off(C) -> None:
+    C.drug.update({
+        "enabled": False, "IR": 0.0, "t_start_h": 1e9,
+        "t_inf_h": 0.0, "bolus_mg": 0.0, "inhibit": False,
+    })
 
 
-def _zero_drug(ic: dict) -> dict:
-    out = dict(ic)
-    for k in ("C_ven", "C_peri", "C_bladder", "Ae_drg"):
-        if k in out:
-            out[k] = 0.0
-    return out
+def _drug_single_iv(C) -> None:
+    C.drug.update({
+        "enabled": True, "IR": DOSE_MG / INFUSION_H,
+        "t_inf_h": INFUSION_H, "t_start_h": 0.05,
+        "bolus_mg": 0.0, "inhibit": True,
+    })
+    for attr, _ in TOXINS.values():
+        d = getattr(C, attr, None)
+        if isinstance(d, dict):
+            d["enabled"] = True
 
 
-def _read_toxins(sol) -> Dict[str, float]:
-    from state_vector import IDX
-    return {
-        name: float(sol.y[IDX[key], -1])
-        for name, key in TOXIN_KEYS.items()
-        if key in IDX
-    }
+def _jsonable(v):
+    if isinstance(v, (int, float, np.floating, np.integer)):
+        return round(float(v), 10)
+    if isinstance(v, dict):
+        return {str(k): _jsonable(x) for k, x in sorted(v.items(), key=lambda kv: str(kv[0]))}
+    if isinstance(v, (list, tuple, np.ndarray)):
+        return [_jsonable(x) for x in list(v)]
+    return str(v)
+
+
+def parameter_fingerprint(scenario: str) -> str:
+    """Hash of CKD-5 compound parameters except the ones the grid varies."""
+    import compounds as C
+    C.initialize_compounds("ckd5")
+    parts = {}
+    for attr in ("tox1", "tox2", "tox3", "drug"):
+        d = getattr(C, attr, {}) or {}
+        parts[attr] = _jsonable({
+            k: v for k, v in d.items()
+            if k not in _DOSING_KEYS
+            and not str(k).startswith("Ki_furo")
+            and str(k) != "Vmax_baso_uptake"
+        })
+    for attr in ("TOX1_PASS", "TOX2_PASS", "TOX3_PASS", "DRG_PASS"):
+        parts[attr] = _jsonable(getattr(C, attr, None))
+    parts["settings"] = dict(
+        scenario=_norm_scenario(scenario),
+        warmup=WARMUP_H, sim=SIM_HOURS,
+        dose=DOSE_MG, inf=INFUSION_H,
+    )
+    return hashlib.sha1(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:12]
 
 
 def _mean_last_cycle(t, y, n_days=30, tau=24.0) -> float:
@@ -167,83 +170,33 @@ def _mean_last_cycle(t, y, n_days=30, tau=24.0) -> float:
     return float(np.trapz(yy, tt) / dt)
 
 
-def _warmup_ic(vmax_scale: float) -> dict:
-    import constants as K
-    import compounds as C
+def _warmup_ic(scale: float) -> dict:
+    """Public helper for heatmap_validate_corners.py (one Vmax, no drug)."""
     from simulation import run_sim
-    K.VERBOSE = False
-    with vmax_scale_ctx(vmax_scale):
-        C.initialize_compounds("ckd5")
-        _force_ki(0.35)
-        C.drug.update({
-            "enabled": False, "IR": 0.0,
-            "t_start_h": 1e9, "t_inf_h": 0.0,
-            "bolus_mg": 0.0, "inhibit": False,
-        })
-        sol = run_sim(t_end_h=WARMUP_H, mode="ckd5", dt=DT_WARMUP)
-        if sol is None:
-            raise RuntimeError("warm-up failed")
-        # Drift check: last 10% vs previous 10% of the tail.
-        n = sol.y.shape[1]
-        a, b = max(n // 10, 2), max(n // 5, 4)
-        from state_vector import IDX
-        for name, key in TOXIN_KEYS.items():
-            if key not in IDX:
-                continue
-            tail = sol.y[IDX[key], -a:]
-            prev = sol.y[IDX[key], -b:-a]
-            m1, m0 = float(np.mean(tail)), float(np.mean(prev))
-            if m0 > 1e-9 and abs(m1 - m0) / m0 > DRIFT_WARN:
-                print(f"    [warn] {name} still drifting after {WARMUP_H:.0f} h "
-                      f"({100 * (m1 - m0) / m0:+.1f}%)")
-        return _ic_from_sol(sol)
-
-
-def _run_iv_pair(ic_ss: dict, ki: float, vmax_scale: float) -> Dict[str, float]:
-    import constants as K
+    from state_vector import IDX
     import compounds as C
-    from simulation import run_sim
+    import constants as K
     K.VERBOSE = False
-    with vmax_scale_ctx(vmax_scale):
-        C.initialize_compounds("ckd5")
-        _force_ki(ki)
-        C.drug.update({
-            "enabled": False, "IR": 0.0,
-            "t_start_h": 1e9, "t_inf_h": 0.0,
-            "bolus_mg": 0.0, "inhibit": False,
-        })
-        sol_no = run_sim(
-            t_end_h=SIM_HOURS, mode="ckd5", dt=DT_SIM,
-            custom_initial_conds=dict(ic_ss),
-        )
-        C.initialize_compounds("ckd5")
-        _force_ki(ki)
-        C.drug.update({
-            "enabled": True,
-            "IR": DOSE_MG / INFUSION_H,
-            "t_inf_h": INFUSION_H,
-            "t_start_h": 0.05,
-            "bolus_mg": 0.0,
-            "inhibit": True,
-        })
-        for attr in ("tox1", "tox2", "tox3"):
-            tox = getattr(C, attr, None)
-            if isinstance(tox, dict):
-                tox["enabled"] = True
-        sol_d = run_sim(
-            t_end_h=SIM_HOURS, mode="ckd5", dt=DT_SIM,
-            custom_initial_conds=_zero_drug(ic_ss),
-        )
-    no, yes = _read_toxins(sol_no), _read_toxins(sol_d)
-    out = {}
-    for name in TOXIN_KEYS:
-        c0, c1 = no.get(name, np.nan), yes.get(name, np.nan)
-        out[name] = (c1 - c0) / c0 * 100.0 if c0 and c0 > 1e-9 else np.nan
-    return out
+    _set_vmax_scale(scale)
+    C.initialize_compounds("ckd5")
+    _drug_off(C)
+    sol_ss = run_sim(t_end_h=WARMUP_H, mode="ckd5", dt=DT_WARMUP)
+    n = max(10, len(sol_ss.t) // 10)
+    for tox, (_, key) in TOXINS.items():
+        s = sol_ss.y[IDX[key], -n:]
+        drift = abs(s[-1] - s[0]) / max(abs(s[-1]), 1e-12)
+        if drift > 0.01:
+            print(f"    [warn] scale={scale:.3f}: {tox} drift {drift * 100:.1f}% "
+                  f"in last 10% of warm-up — increase WARMUP_H")
+    ic = {n: float(sol_ss.y[i, -1]) for n, i in IDX.items()}
+    for k in list(ic):
+        if k.startswith("Ae_"):
+            ic[k] = 0.0
+    return ic
 
 
 def _run_chronic_oral(ic_ss: dict, ki: float, vmax_scale: float) -> Dict[str, float]:
-    """TID 80×3 for 30 days via the Fig 5 driver."""
+    """TID 80×3, 30 days. Last-cycle mean vs warm-up baseline (blood)."""
     import compounds as C
     import dose_response_tid_vs_qd as gen
     saved_ki = gen.Ki
@@ -252,18 +205,18 @@ def _run_chronic_oral(ic_ss: dict, ki: float, vmax_scale: float) -> Dict[str, fl
 
     def _restore_and_force():
         saved_restore()
-        _force_ki(ki)
+        _force_ki(C, ki)
 
     gen._restore_ki = _restore_and_force
     try:
-        with vmax_scale_ctx(vmax_scale):
-            C.initialize_compounds("ckd5")
-            _force_ki(ki)
-            t, IS, HA, pCS, _drg = gen._run_simulation(
-                ic_ss, live_pk={"CL_FURO": np.nan},
-                dose_per_admin=80.0, n_doses=3,
-                dose_times_h=[0.0, 8.0, 16.0],
-            )
+        _set_vmax_scale(vmax_scale)
+        C.initialize_compounds("ckd5")
+        _force_ki(C, ki)
+        t, IS, HA, pCS, _drg = gen._run_simulation(
+            ic_ss, live_pk={"CL_FURO": np.nan},
+            dose_per_admin=80.0, n_doses=3,
+            dose_times_h=[0.0, 8.0, 16.0],
+        )
     finally:
         gen.Ki = saved_ki
         gen._restore_ki = saved_restore
@@ -277,71 +230,126 @@ def _run_chronic_oral(ic_ss: dict, ki: float, vmax_scale: float) -> Dict[str, fl
         "HA": _mean_last_cycle(t, HA),
         "pCS": _mean_last_cycle(t, pCS),
     }
+    return {
+        name: (100.0 * (means[name] / base[name] - 1.0)
+               if base[name] and base[name] > 1e-9 else float("nan"))
+        for name in TOXINS
+    }
+
+
+def run_row(scale: float, ki_values: Sequence[float], scenario: str = "single_iv"
+            ) -> Tuple[Dict[str, float], Dict[float, Dict[str, float]]]:
+    """Warm-up (+ IV no-drug reference) once, then one drug run per Ki."""
+    from simulation import run_sim
+    from state_vector import IDX
+    import compounds as C
+    import constants as K
+    K.VERBOSE = False
+    scenario = _norm_scenario(scenario)
+
+    _set_vmax_scale(scale)
+    C.initialize_compounds("ckd5")
+    _drug_off(C)
+    sol_ss = run_sim(t_end_h=WARMUP_H, mode="ckd5", dt=DT_WARMUP)
+    ic_base = {n: float(sol_ss.y[i, -1]) for n, i in IDX.items()}
+    ic_drug = {
+        k: (0.0 if k in ("C_ven", "C_peri", "C_bladder", "Ae_drg") else v)
+        for k, v in ic_base.items()
+    }
+
+    n = max(10, len(sol_ss.t) // 10)
+    for tox, (_, key) in TOXINS.items():
+        s = sol_ss.y[IDX[key], -n:]
+        drift = abs(s[-1] - s[0]) / max(abs(s[-1]), 1e-12)
+        if drift > 0.01:
+            print(f"    [warn] scale={scale:.3f}: {tox} drift {drift * 100:.1f}% "
+                  f"in last 10% of warm-up — increase WARMUP_H")
+
+    if scenario == "chronic_oral":
+        base = {tox: float(ic_base[key]) for tox, (_, key) in TOXINS.items()}
+        out = {}
+        for ki in ki_values:
+            out[float(ki)] = _run_chronic_oral(ic_base, float(ki), scale)
+        return base, out
+
+    C.initialize_compounds("ckd5")
+    _drug_off(C)
+    sol_no = run_sim(
+        t_end_h=SIM_HOURS, mode="ckd5", dt=DT_SIM,
+        custom_initial_conds=ic_base,
+    )
+    base = {tox: float(sol_no.y[IDX[key], -1]) for tox, (_, key) in TOXINS.items()}
+
     out = {}
-    for name in TOXIN_KEYS:
-        c0, c1 = base[name], means[name]
-        out[name] = (c1 - c0) / c0 * 100.0 if c0 and c0 > 1e-9 else np.nan
-    return out
+    for ki in ki_values:
+        C.initialize_compounds("ckd5")
+        _force_ki(C, ki)
+        _drug_single_iv(C)
+        sol = run_sim(
+            t_end_h=SIM_HOURS, mode="ckd5", dt=DT_SIM,
+            custom_initial_conds=ic_drug,
+        )
+        out[float(ki)] = {
+            tox: 100.0 * (float(sol.y[IDX[key], -1]) / base[tox] - 1.0)
+            for tox, (_, key) in TOXINS.items()
+        }
+    return base, out
 
 
-def compute_heatmaps(
-    scenario: Optional[str] = None,
-    use_cache: bool = True,
-    ki_grid=None,
-    vmax_grid=None,
-) -> Dict[str, np.ndarray]:
-    """Return {"IS","HA","pCS"} 2D arrays (n_vmax × n_ki) of %Δ."""
-    scenario = scenario or SCENARIO
+def compute_heatmaps(ki_grid=None, vmax_grid=None,
+                     scenario: Optional[str] = None, use_cache: bool = True
+                     ) -> Dict[str, np.ndarray]:
+    """Returns {"IS": 2D, "HA": 2D, "pCS": 2D}, shape (n_vmax, n_ki)."""
+    import compound_parameters as CP
+    import constants as K
+    K.VERBOSE = False
+    scenario = _norm_scenario(scenario or SCENARIO)
     ki_grid = Ki_grid if ki_grid is None else np.asarray(ki_grid, float)
     vmax_grid = Vmax_grid if vmax_grid is None else np.asarray(vmax_grid, float)
-    n_v, n_k = len(vmax_grid), len(ki_grid)
-    fp = _compound_fingerprint()
 
-    cache: dict = {}
+    original_scales = copy.deepcopy(CP._CKD_SCALES)
+    fp = parameter_fingerprint(scenario)
+    print(f"Parameter fingerprint: {fp}  scenario={scenario}")
+
+    cache = {}
     if use_cache and os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "rb") as f:
                 cache = pickle.load(f)
-            print(f"  Loaded {len(cache)} cached entries ({CACHE_FILE})")
+            print(f"  Loaded {len(cache)} cached entries")
         except Exception:
             cache = {}
 
-    grids = {name: np.full((n_v, n_k), np.nan) for name in TOXIN_KEYS}
+    grids = {tox: np.full((len(vmax_grid), len(ki_grid)), np.nan) for tox in TOXINS}
     t0 = time.time()
-    print(f"\n  scenario={scenario}  {n_v}×{n_k}  fingerprint={fp}")
-
-    for i, scale in enumerate(vmax_grid):
-        ic_ss = None
-        for j, ki in enumerate(ki_grid):
-            key = (
-                f"{scenario}_{fp}_ki{ki:.6f}_vm{scale:.6f}"
-                f"_w{WARMUP_H:.0f}_t{SIM_HOURS:.0f}"
-            )
-            if key in cache and isinstance(cache[key], dict):
-                for name in TOXIN_KEYS:
-                    grids[name][i, j] = cache[key].get(name, np.nan)
-                continue
-            if ic_ss is None:
-                print(f"    warm-up Vmax={scale:.3f} ({WARMUP_H:.0f} h)…")
-                ic_ss = _warmup_ic(scale)
-            print(f"    [{i + 1}/{n_v} {j + 1}/{n_k}] Ki={ki:.3f}")
-            if scenario == "chronic_oral":
-                pcts = _run_chronic_oral(ic_ss, ki, scale)
-            else:
-                pcts = _run_iv_pair(ic_ss, ki, scale)
-            cache[key] = pcts
-            for name in TOXIN_KEYS:
-                grids[name][i, j] = pcts.get(name, np.nan)
-            try:
+    try:
+        for i, scale in enumerate(vmax_grid):
+            keys = [f"{fp}|{scale:.6f}|{ki:.6f}" for ki in ki_grid]
+            todo = [ki for ki, k in zip(ki_grid, keys) if k not in cache]
+            if todo:
+                print(f"  row {i + 1}/{len(vmax_grid)}  scale={scale:.3f}  "
+                      f"{len(todo)} new Ki  ({(time.time() - t0) / 60:.1f} min)")
+                _, res = run_row(scale, todo, scenario)
+                for ki, r in res.items():
+                    cache[f"{fp}|{scale:.6f}|{ki:.6f}"] = r
                 with open(CACHE_FILE, "wb") as f:
                     pickle.dump(cache, f)
-            except Exception:
-                pass
+            for j, k in enumerate(keys):
+                for tox in TOXINS:
+                    grids[tox][i, j] = cache[k][tox]
+    finally:
+        CP._CKD_SCALES.clear()
+        CP._CKD_SCALES.update(original_scales)
+        CP.CKD_ADJUSTMENTS = CP._create_ckd_adjustments_dynamic(CP._CKD_SCALES)
 
-    print(f"  done in {(time.time() - t0) / 60:.1f} min")
+    for tox, g in grids.items():
+        print(f"  {tox}: {np.nanmin(g):+.2f} % to {np.nanmax(g):+.2f} %")
     return grids
 
 
 def compute_heatmap(toxin: str, use_cache: bool = True) -> np.ndarray:
-    """Back-compat: one toxin from a full three-toxin compute_heatmaps()."""
     return compute_heatmaps(use_cache=use_cache)[toxin]
+
+
+if __name__ == "__main__":
+    compute_heatmaps()

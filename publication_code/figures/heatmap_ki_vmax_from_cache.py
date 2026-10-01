@@ -5,7 +5,7 @@ Manuscript Fig 7 is the analytical chronic oral map
 (heatmap_ki_vmax_analytical.pdf), which is not in this git tree.
 
 This plot uses heatmap_ki_vmax_engine.compute_heatmaps (default
-SCENARIO=iv_single): 24 h no-drug vs 24 h IV 120 mg / 2 h. Colour is
+SCENARIO=single_iv): 24 h no-drug vs 24 h IV 120 mg / 2 h. Colour is
 %Δ of C_tox*_cen at t = 24 h, not ΔC_ss. No Costes +30% contour
 (Section 2.3: a single dose cannot reproduce that signal).
 
@@ -80,7 +80,7 @@ try:
 except Exception:
     pass
 
-grids = compute_heatmaps(scenario="iv_single", use_cache=True)
+grids = compute_heatmaps(scenario="single_iv", use_cache=True)
 _set_times()
 
 fig = plt.figure(figsize=(6.27, 2.55), dpi=300)

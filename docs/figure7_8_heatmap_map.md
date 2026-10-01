@@ -13,7 +13,7 @@
 | File | What it is | Dosing | Toxins | Fig 7? |
 |---|---|---|---|---|
 | `analysis/heatmap_ki_vmax_sensitivity_ode.py` | Legacy IV ODE | **IV 120 mg / 2 h**, 24 h | IS, pCS | **No** |
-| `analysis/heatmap_ki_vmax_engine.py` | Shared warm-up, HA, pKa fingerprint, restore Vmax | `iv_single` or `chronic_oral` TID 80×3 | IS, HA, pCS | Only if `HEATMAP_SCENARIO=chronic_oral` |
+| `analysis/heatmap_ki_vmax_engine.py` | Collaborator engine: row-wise warm-up+no-drug, `TOX*_PASS` fingerprint, restore scales | `single_iv` or `chronic_oral` TID 80×3 | IS, HA, pCS | Only if `HEATMAP_SCENARIO=chronic_oral` |
 | `figures/heatmap_ki_vmax_from_cache.py` | Supplementary IV 3-panel (Times, 6.27 in, no +30%) | IV | IS, pCS, HA | **No** |
 | `analysis/heatmap_fu_sensitivity_ode.py` | Chronic **ODE** \(f_u\times f_u\) (QD 240; C_ven carried) | 30 d oral | IS, pCS | Fig 8 analogue, not Fig 7 |
 | `analysis/heatmap_validate_corners.py` | 5 Ki×Vmax + 5 fu corners vs analytical | `--ode` = TID 80×3 | IS, HA, pCS | Decision test (~2 pp) |
