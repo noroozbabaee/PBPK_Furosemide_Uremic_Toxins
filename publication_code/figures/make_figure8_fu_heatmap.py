@@ -6,6 +6,7 @@ fu_p after multiplication (not a shared ×Deltombe axis). Black star =
 model point (fu_furo=0.05, Deltombe toxin fu).
 
 No contours, no Deltombe/Costes dashed lines, no legend.
+Colorbar ticks on all panels; Delta Css label only on panel C.
 
 Math: Cu_furo = Css_plasma × fu_p (no extra /BP);
 F_OAT1 from Q_GFR and CL_R.
@@ -216,7 +217,8 @@ def main() -> None:
             fontsize=11, fontweight="bold", va="top", ha="left",
         )
         cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label(r"$\Delta C_{\mathrm{ss}}$ (%)")
+        if col == len(PANELS) - 1:
+            cbar.set_label(r"$\Delta C_{\mathrm{ss}}$ (%)")
         cbar.ax.grid(False)
 
     name = "heatmap_fu_analytical_3panels"
