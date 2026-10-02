@@ -1213,9 +1213,11 @@ def main():
               f"({elapsed_A/60:.1f} min)")
         # Save cache
         fp = _build_fingerprint(live_pk)
+        ha_base = float(ic_ss.get("C_tox2_cen", np.asarray(HA_all_A).reshape(-1)[0]))
         save_dict = {"t_all": t_all_A, "IS_all": IS_all_A, "HA_all": HA_all_A,
                      "pCS_all": pCS_all_A, "drg_all": drg_all_A,
                      "IS_base": np.array([IS_base]),
+                     "HA_base": np.array([ha_base]),
                      "pCS_base": np.array([pCS_base])}
         save_dict.update({k: np.array([v]) for k, v in fp.items()})
         np.savez(cache_file_A, **save_dict)
@@ -1341,9 +1343,11 @@ def main():
         _g["DOSE_PER_ADMIN"]  = _orig_dose
         _g["N_DOSES_PER_DAY"] = _orig_n
         _g["DOSE_INTERVAL_H"] = TAU_H / _orig_n
+        ha_base_B = float(ic_ss.get("C_tox2_cen", np.asarray(HA_all_B).reshape(-1)[0]))
         save_dict_B = {"t_all": t_all_B, "IS_all": IS_all_B, "HA_all": HA_all_B,
                        "pCS_all": pCS_all_B, "drg_all": drg_all_B,
                        "IS_base": np.array([IS_base]),
+                       "HA_base": np.array([ha_base_B]),
                        "pCS_base": np.array([pCS_base])}
         save_dict_B.update({k: np.array([v]) for k, v in fp_B2.items()})
         np.savez(cache_file_B, **save_dict_B)

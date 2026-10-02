@@ -35,7 +35,11 @@ Healthy and CKD-5 bar/time-course drivers used by that combiner:
 |---|---|
 | `Figures/chronic_oral_five_panel.pdf` | `figures/make_chronic_oral_five_panel.py` |
 
-TID 120, QD 240, TID 240, no-drug CKD-5. Requires 30-day ODE arms (HA is stored in the caches).
+TID 120, QD 240, TID 240, no-drug CKD-5. Requires 30-day ODE arms with **`HA_all`**.
+`results_Ki0p35_*.npz` files do **not** store HA — generate
+`chronic_oral_cache_*_ckd5*.npz` as described in the root `README.md`
+(section *Chronic-oral CKD-5 caches*). Check local files with
+`python analysis/inspect_chronic_npz.py`.
 
 ```bash
 PYTHONUTF8=1 python3 figures/make_chronic_oral_five_panel.py
