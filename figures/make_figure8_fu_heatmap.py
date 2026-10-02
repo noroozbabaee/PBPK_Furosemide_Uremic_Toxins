@@ -6,9 +6,8 @@ fu_p after multiplication (not a shared ×Deltombe axis). Black star =
 model point (fu_furo=0.05, Deltombe toxin fu).
 
 No contours, no Deltombe/Costes dashed lines, no legend.
-Colorbar ticks on all panels; Delta Css label only on panel C.
-Shared colour scale (same vmin/vmax) on A–C so IS, HA, and pCS
-are visually comparable.
+One shared colourbar for A–C (same vmin/vmax). Do not auto-scale
+each panel.
 
 Math: Cu_furo = Css_plasma × fu_p (no extra /BP);
 F_OAT1 from Q_GFR and CL_R.
@@ -186,7 +185,7 @@ def main() -> None:
     fig.patch.set_facecolor("white")
     gs = gridspec.GridSpec(
         1, 3, figure=fig,
-        wspace=0.38, left=0.07, right=0.98, top=0.88, bottom=0.18,
+        wspace=0.28, left=0.07, right=0.90, top=0.88, bottom=0.18,
     )
     letters = "ABC"
     grids = []
@@ -195,11 +194,13 @@ def main() -> None:
         z = _grid_pct(toxin, live, css_furo, y_fu)
         print(f"  {toxin} map: {np.nanmin(z):+.2f} to {np.nanmax(z):+.2f} %")
         grids.append((toxin, y_fu, z))
-    vmax = max(float(np.nanmax(z)) for _t, _y, z in grids)
-    vmax = max(vmax, 1.0)
-    print(f"  shared colour scale: 0 to {vmax:.2f} %")
+    zmax = max(float(np.nanmax(z)) for _t, _y, z in grids)
+    vmax = float(np.ceil(max(zmax, 1.0) / 5.0) * 5.0)
+    print(f"  SHARED colorbar for A, B, C: 0 to {vmax:.0f} %")
     norm = Normalize(vmin=0.0, vmax=vmax)
 
+    axes = []
+    im0 = None
     for col, (toxin, y_fu, z) in enumerate(grids):
         ax = fig.add_subplot(gs[0, col])
         ax.grid(False)
@@ -210,6 +211,10 @@ def main() -> None:
             shading="gouraud",
             rasterized=True,
         )
+        im.set_clim(0.0, vmax)
+        if im0 is None:
+            im0 = im
+        axes.append(ax)
         ax.scatter(
             [STAR_FU_FURO], [FU_P[toxin]],
             s=55, marker="*", color="black", zorder=5,
@@ -224,10 +229,11 @@ def main() -> None:
             transform=ax.transAxes,
             fontsize=11, fontweight="bold", va="top", ha="left",
         )
-        cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        if col == len(PANELS) - 1:
-            cbar.set_label(r"$\Delta C_{\mathrm{ss}}$ (%)")
-        cbar.ax.grid(False)
+
+    cbar = fig.colorbar(im0, ax=axes, fraction=0.025, pad=0.02)
+    cbar.set_label(r"$\Delta C_{\mathrm{ss}}$ (%)")
+    cbar.ax.grid(False)
+    cbar.set_ticks(np.linspace(0.0, vmax, 6))
 
     name = "heatmap_fu_analytical_3panels"
     for folder in (_RESULTS, _PUB_FIG):
