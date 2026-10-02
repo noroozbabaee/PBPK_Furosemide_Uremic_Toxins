@@ -12,16 +12,16 @@ baseline, \emph{not} a pixel-wise ODE (the 30-day PBPK predictions are
 Figure~5).
 Panels: \textbf{A)}~IS, \textbf{B)}~HA, \textbf{C)}~pCS; all three
 panels share one colour bar (same $\Delta C_{ss}$ scale).
-The map uses a single mean plasma furosemide
-$\overline{C}_{\mathrm{furo}}=5.31$\,mg/L (ODE last-cycle average at TID
-$3\times80$\,mg/day; not $1.68$\,mg/L) with
-$C_u=\overline{C}_{\mathrm{furo}}\,f_{u,p}$ and
+The map uses the ODE last-cycle mean plasma furosemide
+$\overline{C}_{\mathrm{furo}}=5.31$\,mg/L (TID $3\times80$\,mg/day)
+with $C_u=\overline{C}_{\mathrm{furo}}\,f_{u,p}$,
+$CL_{\mathrm{GFR}}=Q_{\mathrm{GFR}}f_{u,p}$, and
 $K_i=0.35$\,mg/L; inhibition is Michaelis--Menten (Supplementary S6).
+At the star (model $f_{u,p}^{\mathrm{furo}}=0.05$, Deltombe toxin $f_{u,p}$)
+the IS colour is $\approx +24$\,\%, next to the 30-day ODE IS $+28.1$\,\%.
 $x$: furosemide $f_{u,p}$ (0.01--0.15).
 $y$: toxin $f_{u,p}$ obtained by scaling the Deltombe CKD-5 values
 (IS $0.10$, HA $0.52$, pCS $0.05$) from $0.4\times$ to $2.5\times$.
-Black star: model operating point ($f_{u,p}^{\mathrm{furo}}=0.05$ at the
-Deltombe toxin $f_{u,p}$).
 HA remains small because residual OAT1 is a minor fraction of HA $CL_R$.
 }
 \label{fig:fu_heatmap}

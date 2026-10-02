@@ -9,6 +9,7 @@
 #   Fig 8  figures/make_figure8_fu_heatmap.py     → heatmap_fu_analytical_3panels.pdf
 # Math: analysis/heatmap_analytical_formulas.py
 # Css_furo default 5.31 mg/L plasma (ODE last-cycle TID 80×3) if no NPZ.
+# CL_GFR = Q_GFR × fu_p (plasma; do not divide by BP). Star IS ≈ +24% vs ODE +28.1%.
 
 ## In the repo
 

@@ -395,7 +395,7 @@ def extract_baseline_pk(ic_ss: dict) -> dict:
     fu_by_tox = {"IS": FU_P_IS, "HA": FU_P_HA, "pCS": FU_P_pCS}
 
     def _foat_gfr(name, cl_r, bp):
-        cl_gfr = GFR_CKD5 * fu_by_tox[name] / bp
+        cl_gfr = GFR_CKD5 * fu_by_tox[name]  # plasma CL_GFR = Q_GFR · fu_p
         fo = max(0.0, min(0.99, 1.0 - cl_gfr / cl_r)) if cl_r > 1e-6 else 0.6
         print(f"  [INFO] {name}: F_OAT1 from Q_GFR={GFR_CKD5:.3f} L/h = {fo:.3f}")
         return fo

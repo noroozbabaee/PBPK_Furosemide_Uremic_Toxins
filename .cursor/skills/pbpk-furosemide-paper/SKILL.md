@@ -227,7 +227,7 @@ Caption (bars): `docs/figure_caption_chronic_oral_pct_bars.tex`. Do **not** swap
 - **RM** — keep phenotype of caches consistent; table notes under the table (`threeparttable`).
 - **DB / Dian** — QD HA Cmax > TID HA Cmax; IS and pCS QD Cmax ≤ TID. Quote last-24 h peaks (plasma = blood/BP).
 - **LN** — all table Cmax and \(\overline{C}_{\mathrm{furo}}\) in **plasma**; old TID Cmax 3.7 and 7.1 were blood.
-- **Fig 7/8** — analytical chronic maps are **not** `heatmap_ki_vmax_from_cache.py` (IV ODE). See `docs/figure7_8_heatmap_map.md`. Vmax axis = fraction of **healthy** OAT1 \(V_{\max}\).
+- **Fig 7/8** — analytical chronic maps are **not** `heatmap_ki_vmax_from_cache.py` (IV ODE). See `docs/figure7_8_heatmap_map.md`. Vmax axis = fraction of **healthy** OAT1 \(V_{\max}\). \(\overline{C}_{\mathrm{furo}}=5.31\) mg/L plasma (not 1.68). \(CL_{\mathrm{GFR}}=Q_{\mathrm{GFR}} f_{u,p}\) (not \(/BP\)). Star IS \(\approx +24\%\) vs ODE \(+28.1\%\).
 
 Initiation protocol (no-drug SS vs with-drug 30 d vs IV PK extract):
 `docs/scenario_initiation_ckd5_chronic_oral.md`. Do not mix those three.

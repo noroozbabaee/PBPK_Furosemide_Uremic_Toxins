@@ -30,7 +30,8 @@ for p in (_SRC_DIR, _THIS_DIR):
         sys.path.insert(0, p)
 
 from heatmap_analytical_formulas import (
-    css_furo_theoretical, mm_pct, KI_DEFAULT, FU_P, BP, f_oat1_from_gfr,
+    mm_pct, KI_DEFAULT, FU_P, BP, f_oat1_from_gfr,
+    CSS_FURO_TID240_PLASMA,
 )
 from heatmap_ki_vmax_engine import (
     _force_ki, _set_vmax, _warmup_ic, _run_chronic_oral,
@@ -101,14 +102,14 @@ def main():
     args = ap.parse_args()
 
     print("=" * 72)
-    print("Fig 7 / 8 corner check — analytical Css_furo = F·Dose_day/(CL·τ)")
+    print("Fig 7 / 8 corner check — Css_furo = ODE last-cycle plasma 5.31 mg/L")
     print("C_tox is total blood; %Δ matches plasma.")
     print("=" * 72)
 
     print("\n--- Ki × Vmax (Fig 7) ---")
     for label, ki, vmax in KIVMAX_POINTS:
         live = _fallback_live_pk(vmax)
-        css_f = css_furo_theoretical(live["CL_FURO"])
+        css_f = CSS_FURO_TID240_PLASMA
         ode_pcts = None
         if args.ode:
             ic = _warmup_ic(vmax)
@@ -134,7 +135,7 @@ def main():
     print("  carry C_ven across days (do not zero at midnight).")
     for label, fu_d, mult in FU_POINTS:
         live = _fallback_live_pk(0.05)
-        css_f = css_furo_theoretical(live["CL_FURO"])
+        css_f = CSS_FURO_TID240_PLASMA
         for tox, cl_k, f_k, b_k in (
             ("IS", "CL_R_IS", "F_OAT1_IS", "IS_base_blood"),
             ("pCS", "CL_R_pCS", "F_OAT1_pCS", "pCS_base_blood"),

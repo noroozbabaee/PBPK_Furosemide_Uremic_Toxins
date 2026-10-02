@@ -13,7 +13,7 @@ value (it replaces the CKD-5 scale of 0.05; it is not “× CKD-5 Vmax”).
 
 Math (heatmap_analytical_formulas.mm_pct):
   Cu_furo = Css_plasma × fu_p   (no extra /BP)
-  CL_GFR  = Q_GFR × fu_p / BP
+  CL_GFR  = Q_GFR × fu_p
   CL_OAT  scales with Vmax / 0.05; CL_R = CL_GFR + CL_OAT
   no-drug Css_blood scales as 1/CL_R
 """
@@ -66,9 +66,8 @@ def _grid_pct(toxin: str, live: dict, css_furo: float) -> np.ndarray:
                "pCS": live["pCS_blood"]}[toxin]
     cl_r_ref = live["CL_R"][toxin]
     fu = FU_P[toxin]
-    bp = BP[toxin]
     qg = live["Q_GFR"]
-    cl_gfr = qg * fu / bp
+    cl_gfr = qg * fu  # plasma CL_GFR = Q_GFR · fu_p
     cl_oat_ref = max(cl_r_ref - cl_gfr, 0.0)
     z = np.empty((len(VMAX_GRID), len(KI_GRID)))
     for i, vmax in enumerate(VMAX_GRID):

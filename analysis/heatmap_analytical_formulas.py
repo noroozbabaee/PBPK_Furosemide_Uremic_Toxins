@@ -9,9 +9,10 @@ Unbound driving conc. (same as the ODE):
     Cu_furo = Css_plasma · fu_p          # do NOT divide by BP again
     Cu_tox  = C_tox_blood · fu_p / BP    # C_tox*_cen is blood
 
-F_OAT1 from filtration vs total plasma CL_R:
-    CL_GFR  = Q_GFR · fu_p / BP
-    F_OAT1  = 1 − CL_GFR / CL_R
+F_OAT1 from filtration vs total plasma CL_R (Ae / AUC_plasma):
+    filtration rate = Q_GFR · Cu = Q_GFR · C_plasma · fu_p
+    CL_GFR          = Q_GFR · fu_p          # not / BP (BP is already in Cu)
+    F_OAT1          = 1 − CL_GFR / CL_R
 CKD-5 Q_GFR ≈ 7.2 × 0.10 = 0.72 L/h (not 0.1 L/h).
 """
 from __future__ import annotations
@@ -52,7 +53,7 @@ def q_gfr_ckd5() -> float:
 def f_oat1_from_gfr(cl_r: float, fu_p: float, bp: float,
                     q_gfr: Optional[float] = None) -> float:
     q = Q_GFR_CKD5_DEFAULT if q_gfr is None else q_gfr
-    cl_gfr = q * fu_p / bp
+    cl_gfr = q * fu_p  # plasma CL; bp kept for call-site compatibility
     if cl_r <= 1e-12:
         return 0.0
     return float(max(0.0, min(0.99, 1.0 - cl_gfr / cl_r)))
