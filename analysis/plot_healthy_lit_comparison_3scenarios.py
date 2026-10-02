@@ -387,8 +387,8 @@ def create_figure_bars_generic(
     Panel A: final plasma concentration [mg/L] vs literature
     Panel B: renal clearance CLR=Ae/AUC [L/h] vs literature
 
-    Literature values are shown as error bars (mean ± range) at x_scenario_0
-    position so they do not overlap with the bars.
+    Literature values are shown as error bars (mean ± range) on the black
+    With Furosemide (interaction) bars, not on No Interaction.
 
     Legend entries are condition-free (No Furosemide / With Furosemide /
     With Furosemide (No Interaction) / Literature). Healthy vs CKD-5 is
@@ -429,7 +429,7 @@ def create_figure_bars_generic(
     lit_lo   = [lit_conc[t]["value"] - lit_conc[t]["range"][0] for t in toxins]
     lit_hi   = [lit_conc[t]["range"][1] - lit_conc[t]["value"] for t in toxins]
     axL.errorbar(
-        x, lit_vals, yerr=[lit_lo, lit_hi],
+        x + offsets[2], lit_vals, yerr=[lit_lo, lit_hi],
         fmt="D", color="black", markerfacecolor="black",
         markersize=6, capsize=5, capthick=2, elinewidth=2,
         label="Literature", zorder=5,
@@ -472,7 +472,7 @@ def create_figure_bars_generic(
     litc_lo   = [lit_clear[t]["value"] - lit_clear[t]["range"][0] for t in toxins]
     litc_hi   = [lit_clear[t]["range"][1] - lit_clear[t]["value"] for t in toxins]
     axR.errorbar(
-        x, litc_vals, yerr=[litc_lo, litc_hi],
+        x + offsets[2], litc_vals, yerr=[litc_lo, litc_hi],
         fmt="D", color="black", markerfacecolor="black",
         markersize=6, capsize=5, capthick=2, elinewidth=2,
         label="Literature", zorder=5,
