@@ -32,6 +32,9 @@ FU_P = {"IS": 0.10, "HA": 0.52, "pCS": 0.05}
 BP = {"IS": 0.70, "HA": 0.84, "pCS": 0.55}
 CSS_PLASMA_TABLE1 = {"IS": 28.16, "HA": 142.86, "pCS": 24.99}
 CL_R_TABLE1 = {"IS": 0.20, "HA": 0.49, "pCS": 0.08}
+# ODE last-cycle mean, TID 80×3 CKD-5: blood 4.358 / BP 0.82.
+# Not 1.68 (that was a theoretical Css from an inflated CL_FURO).
+CSS_FURO_TID240_PLASMA = 5.315
 
 
 def q_gfr_ckd5() -> float:

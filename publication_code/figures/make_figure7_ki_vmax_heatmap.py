@@ -49,7 +49,7 @@ for _p in (_SRC, _ANALYSIS, _THIS_DIR):
         sys.path.insert(0, _p)
 
 from heatmap_analytical_formulas import (  # noqa: E402
-    BP, FU_P, mm_pct, f_oat1_from_gfr, q_gfr_ckd5,
+    BP, FU_P, mm_pct, f_oat1_from_gfr, q_gfr_ckd5, CSS_FURO_TID240_PLASMA,
 )
 from make_figure8_fu_heatmap import _load_live, _style, _panel_label  # noqa: E402
 
@@ -88,11 +88,21 @@ def main() -> None:
     live = _load_live()
     css_furo = live["Css_furo_plasma"]
     print("Figure 7 analytical Ki × Vmax (chronic oral, not IV ODE)")
-    print(f"Css_furo = {css_furo:.3f} mg/L plasma")
+    print(f"Css_furo = {css_furo:.3f} mg/L plasma  "
+          f"(TID 80×3 last-cycle target {CSS_FURO_TID240_PLASMA:.3f})")
     print(f"Q_GFR CKD-5 = {live['Q_GFR']:.3f} L/h")
     for t in PANELS:
         fo = f_oat1_from_gfr(live["CL_R"][t], FU_P[t], BP[t], live["Q_GFR"])
-        print(f"  {t}: CL_R={live['CL_R'][t]:.4f}  F_OAT1(at V=0.05)={fo:.3f}")
+        css_b = {"IS": live["IS_blood"], "HA": live["HA_blood"],
+                 "pCS": live["pCS_blood"]}[t]
+        star = mm_pct(
+            css_b, live["CL_R"][t], fo, t, css_furo, ki=KI_STAR,
+        )
+        extra = "  [ODE TID 240 IS +28.1%]" if t == "IS" else ""
+        print(
+            f"  {t}: CL_R={live['CL_R'][t]:.4f}  F_OAT1(at V=0.05)={fo:.3f}  "
+            f"star ΔCss={star['pct']:+.1f}%{extra}"
+        )
 
     fig = plt.figure(figsize=(11.2, 3.55), dpi=300)
     fig.patch.set_facecolor("white")

@@ -8,7 +8,7 @@
 #   Fig 7  figures/make_figure7_ki_vmax_heatmap.py → heatmap_ki_vmax_analytical.pdf
 #   Fig 8  figures/make_figure8_fu_heatmap.py     → heatmap_fu_analytical_3panels.pdf
 # Math: analysis/heatmap_analytical_formulas.py
-# Css_furo default 1.68 mg/L plasma (ODE last-cycle TID 80×3) if no NPZ.
+# Css_furo default 5.31 mg/L plasma (ODE last-cycle TID 80×3) if no NPZ.
 
 ## In the repo
 

@@ -44,7 +44,8 @@ for _p in (_SRC, _ANALYSIS):
 
 from heatmap_analytical_formulas import (  # noqa: E402
     BP, BP_FURO, FU_P, FU_P_FURO, css_furo_theoretical, mm_pct,
-    CSS_PLASMA_TABLE1, CL_R_TABLE1, f_oat1_from_gfr, q_gfr_ckd5,
+    CSS_PLASMA_TABLE1, CL_R_TABLE1, CSS_FURO_TID240_PLASMA,
+    f_oat1_from_gfr, q_gfr_ckd5,
 )
 
 N = 80
@@ -71,17 +72,38 @@ def _npz_score(path: str) -> tuple:
     return (prefer, os.path.getmtime(path))
 
 
+def _last_cycle_css_plasma(cache) -> float | None:
+    """ODE last 24 h mean C_ven / BP (plasma)."""
+    files = getattr(cache, "files", ())
+    if "t_all" not in files or "drg_all" not in files:
+        return None
+    t = np.asarray(cache["t_all"], dtype=float)
+    y = np.asarray(cache["drg_all"], dtype=float)
+    if t.size < 20:
+        return None
+    t0 = float(t[-1]) - 24.0
+    m = t >= t0
+    if int(np.count_nonzero(m)) < 10:
+        return None
+    trap = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+    dt = float(t[m][-1] - t[m][0])
+    if dt < 12.0:
+        return None
+    blood = float(trap(y[m], t[m]) / dt)
+    return blood / BP_FURO
+
+
 def _load_live():
     qg = q_gfr_ckd5()
     live = {
         "CL_FURO": 1.70,
-        "source": "Table 1 + Q_GFR (no chronic NPZ)",
+        "source": "Table 1 + TID 240 ODE Cavg (no chronic NPZ)",
         "IS_blood": CSS_PLASMA_TABLE1["IS"] * BP["IS"],
         "HA_blood": CSS_PLASMA_TABLE1["HA"] * BP["HA"],
         "pCS_blood": CSS_PLASMA_TABLE1["pCS"] * BP["pCS"],
         "CL_R": dict(CL_R_TABLE1),
         "Q_GFR": qg,
-        "Css_furo_plasma": 1.68,
+        "Css_furo_plasma": CSS_FURO_TID240_PLASMA,
     }
     search = []
     for folder in (_RESULTS, os.path.join(_ROOT, "publication_code", "results")):
@@ -98,10 +120,6 @@ def _load_live():
         is0 = _scalar(z, "IS_base")
         if is0 is None or not (8.0 <= is0 <= 80.0):
             continue
-        cl = _scalar(z, "CL_FURO")
-        if cl is None or cl < 0.2:
-            continue
-        live["CL_FURO"] = cl
         live["source"] = os.path.basename(path)
         live["IS_blood"] = is0
         live["pCS_blood"] = _scalar(z, "pCS_base", live["pCS_blood"])
@@ -110,16 +128,19 @@ def _load_live():
             v = _scalar(z, key)
             if v is not None and v > 0:
                 live["CL_R"][tox] = v
-        ode_css = _scalar(z, "anal_ode_Css_furo")
-        drg = _scalar(z, "drg_avg")
-        if ode_css is not None and ode_css > 0.05:
-            live["Css_furo_plasma"] = ode_css
-        elif drg is not None and drg > 0.05:
-            # ODE C_ven is blood; formula needs plasma.
-            live["Css_furo_plasma"] = drg / BP_FURO if drg > 2.5 else drg
+        cl = _scalar(z, "CL_FURO")
+        if cl is not None and cl >= 0.2:
+            live["CL_FURO"] = cl
+        css = _last_cycle_css_plasma(z)
+        if css is not None and 4.0 <= css <= 7.0:
+            live["Css_furo_plasma"] = css
+        else:
+            live["Css_furo_plasma"] = CSS_FURO_TID240_PLASMA
         print(f"  live PK from {live['source']}")
         print(f"  CL_FURO={live['CL_FURO']:.4f} L/h plasma  "
               f"IS_base_blood={live['IS_blood']:.3f}")
+        print(f"  Css_furo plasma (last-cycle or TID240 default) = "
+              f"{live['Css_furo_plasma']:.3f} mg/L")
         break
     else:
         print(f"  [warn] {live['source']}")
@@ -183,12 +204,22 @@ def main() -> None:
     if css_furo is None:
         css_furo = css_furo_theoretical(live["CL_FURO"])
     print(f"Css_furo = {css_furo:.3f} mg/L plasma  "
-          f"(map input; CL={live['CL_FURO']:.4f})")
+          f"(TID 80×3 last-cycle target {CSS_FURO_TID240_PLASMA:.3f}; "
+          f"CL={live['CL_FURO']:.4f})")
     print(f"Q_GFR CKD-5 = {live['Q_GFR']:.3f} L/h")
     for t in PANELS:
         fo = f_oat1_from_gfr(live["CL_R"][t], FU_P[t], BP[t], live["Q_GFR"])
-        print(f"  {t}: CL_R={live['CL_R'][t]:.4f}  F_OAT1(base)={fo:.3f}  "
-              f"fu_p base={FU_P[t]:.3f}")
+        css_b = {"IS": live["IS_blood"], "HA": live["HA_blood"],
+                 "pCS": live["pCS_blood"]}[t]
+        star = mm_pct(
+            css_b, live["CL_R"][t], fo, t, css_furo,
+            fu_p_furo=STAR_FU_FURO, fu_p_tox=FU_P[t],
+        )
+        extra = "  [ODE TID 240 IS +28.1%]" if t == "IS" else ""
+        print(
+            f"  {t}: CL_R={live['CL_R'][t]:.4f}  F_OAT1(base)={fo:.3f}  "
+            f"fu_p base={FU_P[t]:.3f}  star ΔCss={star['pct']:+.1f}%{extra}"
+        )
 
     fig = plt.figure(figsize=(11.2, 3.55), dpi=300)
     fig.patch.set_facecolor("white")
