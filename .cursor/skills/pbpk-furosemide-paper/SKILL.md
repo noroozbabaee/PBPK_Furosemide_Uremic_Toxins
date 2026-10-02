@@ -62,7 +62,14 @@ pCS pKa = −2 updates healthy/CKD-5 SS vs an older carboxylic pKa.
 
 ## Table 2 — furosemide PK
 
-Peaks in ODE states are **blood**. Report plasma as \(C_{\mathrm{ven}}/BP\) when the paper says plasma. Do not invent a second ODE state.
+Peaks in ODE states are **blood**. Report plasma as \(C_{\mathrm{ven}}/BP\) (\(BP=0.82\)) when the paper says plasma.
+
+Healthy literature (checked 2 Oct 2026):
+
+- \(t_{1/2}=1.2\pm0.3\) h = \(70\pm20\) min, young healthy men, Andreasen *et al.* *Br J Clin Pharmacol* **1983;16(4):391–397** (doi:10.1111/j.1365-2125.1983.tb02183.x). Do **not** use uncited 0.5–1.5 h.
+- \(CL_R\) **4–7 L/h**: Hammarlund *et al.* *Eur J Clin Pharmacol* **1984;26(2):197–207**, renal CL \(117\pm11.3\) mL/min = **7.0 L/h**; Andreasen 1983 renal CL = 67% of serum CL \(170\pm19\) mL/min ≈ **6.8 L/h**.
+
+Paste notes: `docs/table2_furosemide_pk_literature.tex`.
 
 ---
 

@@ -40,8 +40,8 @@ Literature targets (120 mg IV, 2 h infusion)
 ─────────────────────────────────────────────
               Healthy          CKD-5          Source
   Cmax (mg/L) 8–12             3–6            Brater 1983; Vaska 1995
-  t½   (h)    0.3–0.6          1.0–3.0        Andreasen 1983
-  CL_R (L/h)  6–10             1–2            Brater 1980; Chennavasin 1980
+  t½   (h)    1.2 ± 0.3        1.0–3.0        Andreasen 1983 (young 70±20 min)
+  CL_R (L/h)  4–7              1–2            Hammarlund 1984; Andreasen 1983
   AUC (mg·h/L)3–6              15–30          Vaska 1995
   Fe  (%)     60–80            10–25          Brater 1983
 ================================================================================
@@ -97,11 +97,16 @@ T_PK_H:       float = 24.0      # PK window: captures ≥4 half-lives for both m
 #   CKD-5   t½ ~5.8 h  →  5×t½ ≈ 29 h  (mostly captured; tail visible by 24 h)
 
 # Literature reference ranges [lo, hi, typical]
+# Healthy t½: Andreasen 1983 young men 70±20 min = 1.2±0.3 h
+#   Br J Clin Pharmacol 16(4):391–397.
+# Healthy CL_R 4–7 L/h: Hammarlund 1984 117 mL/min = 7.0 L/h
+#   (Eur J Clin Pharmacol 26(2):197–207); Andreasen 1983 67% of
+#   CLS 170 mL/min ≈ 6.8 L/h. Typical = mean of those two.
 _LIT = {
     "healthy": {
         "Cmax":   (8.0,  12.0,  10.0),
-        "CL_R":   (6.0,  10.0,   8.0),
-        "t_half": (1.02,  2.0,  1.5),
+        "CL_R":   (4.0,   7.0,   6.9),
+        "t_half": (0.9,   1.5,   1.2),
         "AUC":    (3.0,   6.0,   4.5),
     },
     "ckd5": {

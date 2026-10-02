@@ -1,0 +1,38 @@
+% Table 2 — furosemide PK literature (healthy t½ and CL_R).
+% Paste notes/TODO under the table. Citations checked 2 Oct 2026.
+
+% Healthy t½: Andreasen 1983, young healthy male volunteers (20–35 y),
+%   80 mg IV over 2 min. Elimination t½ = 70 ± 20 min = 1.2 ± 0.3 h.
+%   Br J Clin Pharmacol 1983;16(4):391–397.
+%   doi:10.1111/j.1365-2125.1983.tb02183.x
+%   (Not the uncited 0.5–1.5 h band.)
+%
+% Healthy CL_R 4–7 L/h, two primary sources:
+%   Hammarlund et al. 1984: renal CL 117 ± 11.3 mL/min = 7.0 L/h
+%     (40 mg IV bolus, 8 healthy subjects).
+%     Eur J Clin Pharmacol 1984;26(2):197–207.
+%     doi:10.1007/BF00630286
+%   Andreasen et al. 1983: serum CL 170 ± 19 mL/min; renal CL = 67% of
+%     serum CL in the young → 0.67 × 170 = 114 mL/min ≈ 6.8 L/h.
+%     Same paper as t½: Br J Clin Pharmacol 1983;16(4):391–397.
+
+% TODO (single note under Table 2; replaces the old blood/plasma TODO):
+% (i) Tabulated $C_{\max}$ and $\overline{C}$ are total plasma
+%     ($C_{\mathrm{ven}}/BP$, furosemide $BP=0.82$), not blood.
+% (ii) Andreasen 1983 is 80 mg IV over 2 min in young men; the model
+%     IV protocol is 120 mg over 2 h — use Andreasen for $t_{1/2}$ and
+%     $CL_R$, not for $C_{\max}$.
+% (iii) CKD-5 $t_{1/2}$ literature remains a wider disease/elderly band
+%     (e.g.\ Andreasen elderly $102\pm33$ min); the CKD-5 model terminal
+%     $t_{1/2}$ is longer because $k_{\mathrm{elim}}$ is reduced.
+
+\newcommand{\AndreasenFurosemideAge}{%
+Andreasen F, Hansen U, Husted SE, Jansen JA.
+The pharmacokinetics of frusemide are influenced by age.
+\textit{Br J Clin Pharmacol}. 1983;16(4):391--397.}
+
+\newcommand{\HammarlundFurosemidePK}{%
+Hammarlund MM, Paalzow LK, Odlind B.
+Pharmacokinetics of furosemide in man after intravenous and oral
+administration. Application of moment analysis.
+\textit{Eur J Clin Pharmacol}. 1984;26(2):197--207.}
