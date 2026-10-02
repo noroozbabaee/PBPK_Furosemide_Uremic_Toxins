@@ -1,26 +1,26 @@
 % Caption for heatmap_fu_analytical_3panels.pdf  (Fig 8, fig:fu_heatmap)
-% Original layout: A IS, B HA, C pCS. No Deltombe/Costes dashed lines.
-% Y-axis = toxin fu_p after multiplication. Star = model operating point.
+% Paste into the manuscript. Closed-form map; not the 30-day ODE.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{Figures/heatmap_fu_analytical_3panels.pdf}
 \caption{%
-\textbf{Two-dimensional sensitivity of PBUT total plasma accumulation to
-furosemide and toxin plasma unbound fractions}, under chronic oral
-furosemide TID ($3\times80$\,mg/day) in CKD-5.
-Colour is the closed-form percentage change $\Delta C_{ss}$ (\%) in
-time-averaged total plasma concentration relative to the no-drug CKD-5
-state, for IS (\textbf{A}), HA (\textbf{B}) and pCS (\textbf{C}).
-The $x$-axis is furosemide $f_{u,p}$ (0.01--0.15).
-The $y$-axis is the toxin $f_{u,p}$ after scaling the Deltombe CKD-5
-value (IS $0.10$, HA $0.52$, pCS $0.05$) over $0.4$--$2.5\times$.
-The black star is the model point ($f_{u,p}^{\mathrm{furo}}=0.05$ at the
+\textbf{Closed-form sensitivity of PBUT plasma accumulation to unbound
+fractions} under chronic oral furosemide TID $3\times80$\,mg/day in CKD-5.
+Colour is analytical $\Delta C_{ss}$ (\%) relative to the no-drug CKD-5
+baseline, \emph{not} a pixel-wise ODE (the 30-day PBPK predictions are
+Figure~5).
+Panels: IS (\textbf{A}), HA (\textbf{B}), pCS (\textbf{C}).
+The map uses a single mean plasma furosemide
+$\overline{C}_{\mathrm{furo}}=1.68$\,mg/L (ODE last-cycle average at this
+regimen) with $C_u=\overline{C}_{\mathrm{furo}}\,f_{u,p}$ and
+$K_i=0.35$\,mg/L; inhibition is Michaelis--Menten (Supplementary S6).
+$x$: furosemide $f_{u,p}$ (0.01--0.15).
+$y$: toxin $f_{u,p}$ obtained by scaling the Deltombe CKD-5 values
+(IS $0.10$, HA $0.52$, pCS $0.05$) from $0.4\times$ to $2.5\times$.
+Black star: model operating point ($f_{u,p}^{\mathrm{furo}}=0.05$ at the
 Deltombe toxin $f_{u,p}$).
-No isolines are drawn.
-Unbound furosemide in the map is $C_{u}=C_{\mathrm{ss,plasma}}\,f_{u,p}$
-(plasma $C_{\mathrm{ss}}$; no extra $BP$ division).
-$K_i=0.35$\,mg/L.
+HA remains small because residual OAT1 is a minor fraction of HA $CL_R$.
 }
 \label{fig:fu_heatmap}
 \end{figure}
