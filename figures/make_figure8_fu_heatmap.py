@@ -10,6 +10,7 @@ One shared colourbar for A–C (same vmin/vmax). Do not auto-scale
 each panel.
 
 Math: Cu_furo = Css_plasma × fu_p (no extra /BP);
+CL_GFR = Q_GFR × fu_p (plasma; no extra /BP);
 F_OAT1 from Q_GFR and CL_R.
 """
 from __future__ import annotations
@@ -43,7 +44,7 @@ for _p in (_SRC, _ANALYSIS):
         sys.path.insert(0, _p)
 
 from heatmap_analytical_formulas import (  # noqa: E402
-    BP, BP_FURO, FU_P, FU_P_FURO, css_furo_theoretical, mm_pct,
+    BP, BP_FURO, FU_P, FU_P_FURO, mm_pct,
     CSS_PLASMA_TABLE1, CL_R_TABLE1, CSS_FURO_TID240_PLASMA,
     f_oat1_from_gfr, q_gfr_ckd5,
 )
@@ -171,13 +172,12 @@ def _grid_pct(toxin: str, live: dict, css_furo: float, y_fu: np.ndarray) -> np.n
                  "pCS": live["pCS_blood"]}[toxin]
     cl_r0 = live["CL_R"][toxin]
     fu0 = FU_P[toxin]
-    bp = BP[toxin]
     qg = live["Q_GFR"]
-    cl_gfr0 = qg * fu0 / bp
+    cl_gfr0 = qg * fu0  # plasma CL_GFR = Q_GFR · fu_p
     cl_oat0 = max(cl_r0 - cl_gfr0, 0.0)
     z = np.empty((len(y_fu), len(FU_DRUG)))
     for i, fu_t in enumerate(y_fu):
-        cl_gfr = qg * fu_t / bp
+        cl_gfr = qg * fu_t
         cl_r = cl_gfr + cl_oat0
         f_oat = cl_oat0 / cl_r if cl_r > 1e-12 else 0.0
         for j, fu_d in enumerate(FU_DRUG):
@@ -201,8 +201,6 @@ def main() -> None:
     _style()
     live = _load_live()
     css_furo = live["Css_furo_plasma"]
-    if css_furo is None:
-        css_furo = css_furo_theoretical(live["CL_FURO"])
     print(f"Css_furo = {css_furo:.3f} mg/L plasma  "
           f"(TID 80×3 last-cycle target {CSS_FURO_TID240_PLASMA:.3f}; "
           f"CL={live['CL_FURO']:.4f})")
