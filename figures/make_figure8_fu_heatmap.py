@@ -7,6 +7,8 @@ model point (fu_furo=0.05, Deltombe toxin fu).
 
 No contours, no Deltombe/Costes dashed lines, no legend.
 Colorbar ticks on all panels; Delta Css label only on panel C.
+Shared colour scale (same vmin/vmax) on A–C so IS, HA, and pCS
+are visually comparable.
 
 Math: Cu_furo = Css_plasma × fu_p (no extra /BP);
 F_OAT1 from Q_GFR and CL_R.
@@ -187,18 +189,24 @@ def main() -> None:
         wspace=0.38, left=0.07, right=0.98, top=0.88, bottom=0.18,
     )
     letters = "ABC"
-
-    for col, toxin in enumerate(PANELS):
+    grids = []
+    for toxin in PANELS:
         y_fu = FU_P[toxin] * FU_MULT
         z = _grid_pct(toxin, live, css_furo, y_fu)
         print(f"  {toxin} map: {np.nanmin(z):+.2f} to {np.nanmax(z):+.2f} %")
+        grids.append((toxin, y_fu, z))
+    vmax = max(float(np.nanmax(z)) for _t, _y, z in grids)
+    vmax = max(vmax, 1.0)
+    print(f"  shared colour scale: 0 to {vmax:.2f} %")
+    norm = Normalize(vmin=0.0, vmax=vmax)
+
+    for col, (toxin, y_fu, z) in enumerate(grids):
         ax = fig.add_subplot(gs[0, col])
         ax.grid(False)
-        vmax = max(float(np.nanmax(z)), 1.0)
         im = ax.pcolormesh(
             FU_DRUG, y_fu, z,
             cmap="YlOrRd",
-            norm=Normalize(vmin=0.0, vmax=vmax),
+            norm=norm,
             shading="gouraud",
             rasterized=True,
         )
