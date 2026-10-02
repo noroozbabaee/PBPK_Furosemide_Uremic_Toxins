@@ -545,13 +545,13 @@ def create_figure_bars_generic(
     axL.bar(x_s2, finals[sc2], width, label=_legend_label(sc2),
             color=colors[sc2], alpha=0.85, edgecolor="black", linewidth=0.5)
 
-    # Literature error bars (plotted at x_s0 position)
+    # Literature error bars on black With Furosemide (interaction) bars
     lit_vals = [lit_conc[t]["value"] for t in toxins]
     lit_lo   = [lit_conc[t]["value"] - lit_conc[t]["range"][0] for t in toxins]
     lit_hi   = [lit_conc[t]["range"][1] - lit_conc[t]["value"]  for t in toxins]
 
     axL.errorbar(
-        x_s0, lit_vals,
+        x_s2, lit_vals,
         yerr=[lit_lo, lit_hi],
         fmt="D", color="black", markerfacecolor="black",
         markersize=6, capsize=5, capthick=2, elinewidth=2,
