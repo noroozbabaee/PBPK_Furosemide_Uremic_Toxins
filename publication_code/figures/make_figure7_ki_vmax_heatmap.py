@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Manuscript Figure 7 — analytical Ki × Vmax, chronic oral CKD-5.
 
-Same 3-panel look as Figure 8: A IS, B HA, C pCS. Black star = model
+Same 3-panel look as Figure 8: A) IS, B) HA, C) pCS. Black star = model
 point (Ki=0.35 mg/L, Vmax=0.05 × healthy OAT1). No contours, no
 Costes/Deltombe dashed lines, no legend.
 
@@ -50,7 +50,7 @@ for _p in (_SRC, _ANALYSIS, _THIS_DIR):
 from heatmap_analytical_formulas import (  # noqa: E402
     BP, FU_P, mm_pct, f_oat1_from_gfr, q_gfr_ckd5,
 )
-from make_figure8_fu_heatmap import _load_live, _style  # noqa: E402
+from make_figure8_fu_heatmap import _load_live, _style, _panel_label  # noqa: E402
 
 N_KI, N_VMAX = 80, 80
 KI_GRID = np.logspace(np.log10(0.05), np.log10(5.0), N_KI)
@@ -99,7 +99,6 @@ def main() -> None:
         1, 3, figure=fig,
         wspace=0.38, left=0.07, right=0.98, top=0.88, bottom=0.18,
     )
-    letters = "ABC"
 
     for col, toxin in enumerate(PANELS):
         z = _grid_pct(toxin, live, css_furo)
@@ -129,11 +128,7 @@ def main() -> None:
                 f"{x:.2f}" if x < 0.1 else f"{x:.1f}" if x < 1 else f"{x:.0f}"
             )
         ))
-        ax.text(
-            0.03, 0.97, f"{letters[col]}\n{toxin}",
-            transform=ax.transAxes,
-            fontsize=11, fontweight="bold", va="top", ha="left",
-        )
+        _panel_label(ax, col, toxin)
         cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
         cbar.set_label(r"$\Delta C_{\mathrm{ss}}$ (%)")
         cbar.ax.grid(False)

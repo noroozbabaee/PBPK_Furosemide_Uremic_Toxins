@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Manuscript Figure 8 — original 3-panel furosemide fu × toxin fu.
 
-Layout matches the paper screenshot: A IS, B HA, C pCS; y-axis is toxin
+Layout matches the paper screenshot: A) IS, B) HA, C) pCS; y-axis is toxin
 fu_p after multiplication (not a shared ×Deltombe axis). Black star =
 model point (fu_furo=0.05, Deltombe toxin fu).
 
@@ -167,6 +167,15 @@ def _grid_pct(toxin: str, live: dict, css_furo: float, y_fu: np.ndarray) -> np.n
     return z
 
 
+def _panel_label(ax, col: int, toxin: str) -> None:
+    """Top-left panel tag, same on Fig 7 and Fig 8: A) IS, B) HA, C) pCS."""
+    ax.text(
+        0.03, 0.97, f"{'ABC'[col]}) {toxin}",
+        transform=ax.transAxes,
+        fontsize=11, fontweight="bold", va="top", ha="left",
+    )
+
+
 def main() -> None:
     _style()
     live = _load_live()
@@ -187,7 +196,6 @@ def main() -> None:
         1, 3, figure=fig,
         wspace=0.28, left=0.07, right=0.90, top=0.88, bottom=0.18,
     )
-    letters = "ABC"
     grids = []
     for toxin in PANELS:
         y_fu = FU_P[toxin] * FU_MULT
@@ -224,11 +232,7 @@ def main() -> None:
         ax.set_xlabel(r"Furosemide $f_{u,p}$")
         if col == 0:
             ax.set_ylabel(r"Toxin $f_{u,p}$ (after multiplication)")
-        ax.text(
-            0.03, 0.97, f"{letters[col]}\n{toxin}",
-            transform=ax.transAxes,
-            fontsize=11, fontweight="bold", va="top", ha="left",
-        )
+        _panel_label(ax, col, toxin)
 
     cbar = fig.colorbar(im0, ax=axes, fraction=0.025, pad=0.02)
     cbar.set_label(r"$\Delta C_{\mathrm{ss}}$ (%)")
