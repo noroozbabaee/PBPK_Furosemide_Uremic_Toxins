@@ -63,6 +63,9 @@ CKD_IS_BASE_MAX = 80.0
 N_DAYS = 30
 TAU_H = 24.0
 
+# Cache arrays are ODE blood. Plots and Cmax prints use total plasma.
+BP_PLOT = {"IS": 0.70, "HA": 0.84, "pCS": 0.55, "drg": 0.82}
+
 REGIMENS = (
     # name, dose_per_admin, n_doses, linestyle, grey, lw
     ("TID_120mg", 40.0, 3, "--", "0.45", 1.5),
@@ -361,7 +364,8 @@ def plot_rows(rows: list[dict], styles: dict) -> None:
         ax.spines["right"].set_visible(False)
         for r in rows:
             ls, c, lw = styles[r["name"]]
-            ax.plot(r["t"] / 24.0, r[key], ls=ls, color=c, lw=lw, label=r["name"])
+            ax.plot(r["t"] / 24.0, np.asarray(r[key], dtype=float) / BP_PLOT[key],
+                    ls=ls, color=c, lw=lw, label=r["name"])
         ax.set_xlim(0, N_DAYS)
         ax.set_xlabel("Time (days)")
         ax.set_ylabel(ylab)
@@ -398,7 +402,7 @@ def main() -> None:
             f"{r['pct_pCS']:>+7.1f}% {r['drg_avg']:9.3f}  {r['IS_base']:.3f}"
         )
     print("=" * 65)
-    print("Last 24 h peaks (ODE blood mg/L). Plasma = blood / BP.")
+    print("Last 24 h peaks (total plasma = blood / BP).")
     print("BP: IS 0.70  HA 0.84  pCS 0.55  furosemide 0.82")
     print(
         f"{'Regimen':<14} {'IS Cmax':>8} {'HA Cmax':>8} {'pCS Cmax':>8} "
@@ -406,21 +410,30 @@ def main() -> None:
     )
     for r in rows:
         print(
-            f"{r['name']:<14} {r['IS_max']:8.3f} {r['HA_max']:8.3f} "
-            f"{r['pCS_max']:8.3f} {r['drg_max']:10.3f} {r['drg_avg']:10.3f}"
+            f"{r['name']:<14} {r['IS_max']/BP_PLOT['IS']:8.3f} "
+            f"{r['HA_max']/BP_PLOT['HA']:8.3f} "
+            f"{r['pCS_max']/BP_PLOT['pCS']:8.3f} "
+            f"{r['drg_max']/BP_PLOT['drg']:10.3f} "
+            f"{r['drg_avg']/BP_PLOT['drg']:10.3f}"
         )
     by = {r["name"]: r for r in rows}
     if "QD_240mg" in by and "TID_240mg" in by:
         q, t = by["QD_240mg"], by["TID_240mg"]
         print("-" * 65)
-        print("DB check (same 240 mg/day, last 24 h blood Cmax):")
-        for key, lab in (("IS_max", "IS"), ("HA_max", "HA"), ("pCS_max", "pCS")):
-            qd, tid = q[key], t[key]
+        print("DB check (same 240 mg/day, last 24 h plasma Cmax):")
+        for key, lab, bp in (
+            ("IS_max", "IS", BP_PLOT["IS"]),
+            ("HA_max", "HA", BP_PLOT["HA"]),
+            ("pCS_max", "pCS", BP_PLOT["pCS"]),
+        ):
+            qd, tid = q[key] / bp, t[key] / bp
             flag = "QD peak > TID" if qd > tid + 1e-9 else "QD peak <= TID"
             print(f"  {lab}: QD {qd:.3f}  TID {tid:.3f}  → {flag}")
         print(
-            f"  Furosemide: QD Cmax {q['drg_max']:.2f}  TID Cmax {t['drg_max']:.2f}  "
-            f"QD Cavg {q['drg_avg']:.2f}  TID Cavg {t['drg_avg']:.2f}"
+            f"  Furosemide: QD Cmax {q['drg_max']/BP_PLOT['drg']:.2f}  "
+            f"TID Cmax {t['drg_max']/BP_PLOT['drg']:.2f}  "
+            f"QD Cavg {q['drg_avg']/BP_PLOT['drg']:.2f}  "
+            f"TID Cavg {t['drg_avg']/BP_PLOT['drg']:.2f}"
         )
     print("=" * 65)
     print("Plotting regimens:", [r["name"] for r in rows])

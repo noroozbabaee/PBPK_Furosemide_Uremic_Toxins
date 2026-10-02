@@ -93,10 +93,11 @@ pCS_ts   = cache["pCS_all"]
 drg_ts   = cache["drg_all"]
 IS_base  = float(cache["IS_base"][0])
 pCS_base = float(cache["pCS_base"][0])
+BP_IS, BP_pCS = 0.70, 0.55
 
 print(f"[CACHE] Loaded {len(t_ts)} time points from {cache_path}")
-print(f"  IS_base  = {IS_base:.3f} mg/L")
-print(f"  pCS_base = {pCS_base:.3f} mg/L")
+print(f"  IS_base  = {IS_base:.3f} mg/L blood  ({IS_base/BP_IS:.3f} plasma)")
+print(f"  pCS_base = {pCS_base:.3f} mg/L blood  ({pCS_base/BP_pCS:.3f} plasma)")
 
 # ── Load derived metrics + run parameters from results file ───────────────────
 if not os.path.exists(results_path):
@@ -189,9 +190,7 @@ TAU_H = 24.0
 # ── Last-day cycle ─────────────────────────────────────────────────────────────
 mask_last  = t_ts >= (N_DAYS - 1) * TAU_H
 t_last     = t_ts[mask_last]
-IS_last    = IS_ts[mask_last]
-pCS_last   = pCS_ts[mask_last]
-drg_last   = drg_ts[mask_last]
+drg_last_blood = np.asarray(drg_ts[mask_last], dtype=float)
 t_last_rel = t_last - t_last[0]   # 0–24h relative
 
 def _trapz(y, x):
@@ -199,20 +198,27 @@ def _trapz(y, x):
     if hasattr(np, "trapezoid"):
         return np.trapezoid(y, x)
     return np.trapz(y, x)
+
+# Cu_furo = C_blood × fu_p / BP  (= C_plasma × fu_p)
+alpha_last = 1.0 + drg_last_blood * fu_p / BP / Ki
+
+IS_ts    = np.asarray(IS_ts, dtype=float) / BP_IS
+pCS_ts   = np.asarray(pCS_ts, dtype=float) / BP_pCS
+drg_ts   = np.asarray(drg_ts, dtype=float) / BP
+IS_base  = float(IS_base) / BP_IS
+pCS_base = float(pCS_base) / BP_pCS
+IS_last  = IS_ts[mask_last]
+pCS_last = pCS_ts[mask_last]
+drg_last = drg_ts[mask_last]
 dt_last  = t_last[-1] - t_last[0]
 drg_avg  = float(_trapz(drg_last, t_last) / dt_last)
 
-print(f"  Furo ODE avg (last cycle) = {drg_avg:.3f} mg/L")
+print(f"  Furo ODE avg (last cycle) = {drg_avg:.3f} mg/L plasma")
 
-# ── Alpha from last-cycle ODE furosemide ───────────────────────────────────────
-alpha_last = 1.0 + drg_last * fu_p / BP / Ki
-
-# Cmax/Tmax from ODE cache
 idx_cmax = int(np.argmax(drg_last))
 Cmax_ode = float(drg_last[idx_cmax])
 Tmax_ode = float(t_last_rel[idx_cmax])
 
-# Active window (C_furo > 1 mg/L) from last cycle
 active       = drg_last > 1.0
 t_active_end = float(t_last_rel[active][-1]) if active.any() else 8.0
 
@@ -288,7 +294,7 @@ ax_A.tick_params(labelsize=13)
 # PANEL B — Furosemide 30-day time course
 # ══════════════════════════════════════════════════════════════════════════════
 ax_B.plot(t_days, drg_ts, color="#BA7517", lw=0.7, alpha=0.88,
-          label="Furosemide $C_{ven}$ (ODE)")
+          label="Furosemide plasma (ODE)")
 
 # Analytical Css,avg reference
 ax_B.axhline(Css_avg, color="#2E86C1", ls="--", lw=1.8,
@@ -366,7 +372,7 @@ ax_D2 = ax_D.twinx()
 
 ax_D.fill_between(t_last_rel, drg_last, alpha=0.20, color="#BA7517")
 ax_D.plot(t_last_rel, drg_last, color="#BA7517", lw=2.0,
-          label=r"Furosemide $C_{ven}(t)$ [ODE, day " + f"{N_DAYS}]")
+          label=r"Furosemide plasma $(t)$ [ODE, day " + f"{N_DAYS}]")
 ax_D.axhline(Css_avg, color="#2E86C1", ls="--", lw=1.6,
              label=f"Analytical $C_{{ss,avg}}$ = {Css_avg:.2f} mg/L")
 

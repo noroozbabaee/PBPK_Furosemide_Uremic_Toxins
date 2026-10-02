@@ -750,7 +750,7 @@ def print_results(IS_base, pCS_base, pct_IS, pct_pCS,
           f"  F_OAT1_pCS = {live_pk['F_OAT1_pCS']:.4f}")
 
     print(f"\n  FUROSEMIDE:")
-    print(f"  ODE avg (last cycle)         = {drg_avg:.4f} mg/L")
+    print(f"  ODE avg (last cycle)         = {drg_avg:.4f} mg/L plasma")
     print(f"  Analytical Css,avg           = {anal['IS']['Css_furo']:.4f} mg/L")
     print(f"  alpha (1 + Cu_furo/Ki)       = {anal['IS']['alpha']:.4f}")
     print(f"  s (IS, exact MM)             = {anal['IS']['s']:.4f}")
@@ -792,6 +792,16 @@ def plot_results(t_all, IS_all, pCS_all, drg_all,
                  t_last, IS_last, pCS_last, drg_last,
                  IS_base, pCS_base, pct_IS, pct_pCS,
                  anal, drg_avg, ode_at_sample, live_pk) -> None:
+    # Plot total plasma (ODE blood / BP). Caches remain blood.
+    IS_all = np.asarray(IS_all, dtype=float) / BP_IS
+    pCS_all = np.asarray(pCS_all, dtype=float) / BP_pCS
+    drg_all = np.asarray(drg_all, dtype=float) / BP_FURO
+    t_last = np.asarray(t_last, dtype=float)
+    IS_last = np.asarray(IS_last, dtype=float) / BP_IS
+    pCS_last = np.asarray(pCS_last, dtype=float) / BP_pCS
+    drg_last = np.asarray(drg_last, dtype=float) / BP_FURO
+    IS_base = float(IS_base) / BP_IS
+    pCS_base = float(pCS_base) / BP_pCS
     plt.rcParams.update({
         "font.family": "sans-serif", "font.size": 9,
         "axes.linewidth": 0.8,
@@ -1121,7 +1131,7 @@ def _compute_metrics(t_all, IS_all, pCS_all, drg_all,
 
     IS_avg  = float(_trapz(IS_last,  t_last) / dt_last)
     pCS_avg = float(_trapz(pCS_last, t_last) / dt_last)
-    drg_avg = float(_trapz(drg_last, t_last) / dt_last)
+    drg_avg = float(_trapz(drg_last, t_last) / dt_last) / BP_FURO
 
     pct_IS  = (IS_avg  - IS_base)  / IS_base  * 100
     pct_pCS = (pCS_avg - pCS_base) / pCS_base * 100

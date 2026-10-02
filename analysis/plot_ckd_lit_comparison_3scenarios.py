@@ -146,6 +146,15 @@ def _trapz(y, x):
     return np.trapz(y, x)
 
 
+# ODE C_tox*_cen is total blood. Paper tables/figures use total plasma.
+# C_plasma = C_blood / BP;  CL_R,plasma = ΔAe / ∫C_plasma dt
+TOXIN_BP = {"IS": 0.70, "HA": 0.84, "pCS": 0.55}
+
+
+def _to_plasma_conc(C_blood, toxin_label: str):
+    return np.asarray(C_blood, dtype=float) / TOXIN_BP[toxin_label]
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 0.  Utilities
 # ══════════════════════════════════════════════════════════════════════════════
@@ -227,6 +236,7 @@ def _clearance_auc_window(
     toxin_idx: Optional[int],
     Ae_idx: Optional[int],
     time_window: Tuple[float, float],
+    bp: float = 1.0,
 ) -> float:
     """
     Compute renal clearance over a time window using CLR = Ae / AUC.
@@ -275,7 +285,8 @@ def _clearance_auc_window(
     Ae_w = np.maximum.accumulate(np.asarray(sol.y[Ae_idx][i0:i1], dtype=float))
 
     dAe = max(0.0, float(Ae_w[-1] - Ae_w[0]))   # [mg]
-    auc = float(_trapz(C_w, t_w))           # [mg/L·h]
+    C_plasma = C_w / max(float(bp), 1e-12)
+    auc = float(_trapz(C_plasma, t_w))           # [mg/L·h plasma]
 
     if auc <= 1e-9:
         return np.nan
@@ -389,7 +400,7 @@ def create_figure_timecourses_generic(
                 continue
             ax.plot(
                 sol.t,
-                sol.y[s_idx],
+                _to_plasma_conc(sol.y[s_idx], toxin_label),
                 label=name,
                 color=colors.get(name, "#000000"),
                 linestyle=line_styles.get(name, "-"),
@@ -397,7 +408,7 @@ def create_figure_timecourses_generic(
             )
 
         ax.set_xlabel("Time (h)", fontsize=16)
-        ax.set_ylabel("Concentration (mg/L)", fontsize=16)
+        ax.set_ylabel("Plasma concentration (mg/L)", fontsize=16)
         ax.tick_params(axis="both", labelsize=12)
         ax.grid(True, alpha=0.25)
         ax.spines["top"].set_visible(False)
@@ -516,12 +527,14 @@ def create_figure_bars_generic(
     # ── Panel C: final plasma concentrations ──────────────────────────────────
     finals: Dict[str, List[float]] = {name: [] for name in scenario_names}
 
-    for state in toxin_states:
+    for tox_label, state in zip(toxins, toxin_states):
         s_idx = idx_map.get(state)
         for name in scenario_names:
             sol = solutions.get(name)
             if sol is not None and s_idx is not None:
-                finals[name].append(float(sol.y[s_idx, -1]))
+                finals[name].append(
+                    float(_to_plasma_conc(sol.y[s_idx, -1], tox_label).reshape(-1)[0])
+                )
             else:
                 finals[name].append(np.nan)
 
@@ -560,13 +573,14 @@ def create_figure_bars_generic(
     # ── Panel D: renal clearances ─────────────────────────────────────────────
     clears: Dict[str, List[float]] = {name: [] for name in scenario_names}
 
-    for c_state, ae_state in zip(toxin_states, ae_states):
+    for tox_label, c_state, ae_state in zip(toxins, toxin_states, ae_states):
         c_idx  = idx_map.get(c_state)
         ae_idx = idx_map.get(ae_state)
+        bp = TOXIN_BP[tox_label]
         for name in scenario_names:
             sol = solutions.get(name)
             clears[name].append(
-                clearance_fn(sol, c_idx, ae_idx, window)
+                clearance_fn(sol, c_idx, ae_idx, window, bp)
             )
 
     axR.bar(x_s0, clears[sc0], width, label=_legend_label(sc0),
