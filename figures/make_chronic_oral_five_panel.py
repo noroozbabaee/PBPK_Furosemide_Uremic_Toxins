@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Five-panel chronic oral CKD-5 figure (paper layout).
 
-A–C: 30-day IS / pCS / HA **total plasma** (ODE blood / BP)
+A–C: 30-day IS / HA / pCS **total plasma** (ODE blood / BP)
 D:   furosemide total plasma, final 3-day window
 E:   furosemide total plasma, final 24 h cycle
 
@@ -420,8 +420,8 @@ def plot(runs) -> plt.Figure:
 
     top = (
         (axA, "IS_all", "IS plasma\n(mg/L)", "A) IS"),
-        (axB, "pCS_all", "pCS plasma\n(mg/L)", "B) pCS"),
-        (axC, "HA_all", "HA plasma\n(mg/L)", "C) HA"),
+        (axB, "HA_all", "HA plasma\n(mg/L)", "B) HA"),
+        (axC, "pCS_all", "pCS plasma\n(mg/L)", "C) pCS"),
     )
     for ax, key, ylab, letter in top:
         c0 = bases_pl[key]

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Three-panel %change bars for CKD-5 chronic oral regimens.
 
-A IS · B p-CS · C HA
+A IS · B HA · C pCS
 Groups: TID 120 / QD 240 / TID 240 mg/day
 Bars: Total, Bound, Unbound (same %Δ when fu_p is constant)
 
@@ -187,16 +187,16 @@ def plot_pct_bars(rows: list[dict]) -> plt.Figure:
     _draw_panel(
         axA,
         is_pct,
-        "A",
+        "A) IS",
         clin=(gen.CLIN_IS_PCT, gen.CLIN_IS_LO, gen.CLIN_IS_HI),
     )
+    _draw_panel(axB, ha_pct, "B) HA", clin=None, ha_note=True, note_size=16)
     _draw_panel(
-        axB,
+        axC,
         pcs_pct,
-        "B",
+        "C) pCS",
         clin=(gen.CLIN_pCS_PCT, gen.CLIN_pCS_LO, gen.CLIN_pCS_HI),
     )
-    _draw_panel(axC, ha_pct, "C", clin=None, ha_note=True, note_size=16)
 
     legend_handles = [
         Patch(facecolor=c, edgecolor="none", label=lab)
