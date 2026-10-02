@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Manuscript Figure 7 — analytical Ki × Vmax, chronic oral CKD-5.
 
-Same 3-panel look as Figure 8: A) IS, B) HA, C) pCS. Black star = model
+Same 3-panel look as Figure 8: A) IS, B) HA, C) pCS; one shared
+colourbar. Black star = model
 point (Ki=0.35 mg/L, Vmax=0.05 × healthy OAT1). No contours, no
 Costes/Deltombe dashed lines, no legend.
 
@@ -97,22 +98,34 @@ def main() -> None:
     fig.patch.set_facecolor("white")
     gs = gridspec.GridSpec(
         1, 3, figure=fig,
-        wspace=0.38, left=0.07, right=0.98, top=0.88, bottom=0.18,
+        wspace=0.28, left=0.07, right=0.90, top=0.88, bottom=0.18,
     )
-
-    for col, toxin in enumerate(PANELS):
+    grids = []
+    for toxin in PANELS:
         z = _grid_pct(toxin, live, css_furo)
         print(f"  {toxin} map: {np.nanmin(z):+.2f} to {np.nanmax(z):+.2f} %")
+        grids.append((toxin, z))
+    zmax = max(float(np.nanmax(z)) for _t, z in grids)
+    vmax = float(np.ceil(max(zmax, 1.0) / 5.0) * 5.0)
+    print(f"  SHARED colorbar for A, B, C: 0 to {vmax:.0f} %")
+    norm = Normalize(vmin=0.0, vmax=vmax)
+
+    axes = []
+    im0 = None
+    for col, (toxin, z) in enumerate(grids):
         ax = fig.add_subplot(gs[0, col])
         ax.grid(False)
-        vmax_c = max(float(np.nanmax(z)), 1.0)
         im = ax.pcolormesh(
             KI_GRID, VMAX_GRID, z,
             cmap="YlOrRd",
-            norm=Normalize(vmin=0.0, vmax=vmax_c),
+            norm=norm,
             shading="gouraud",
             rasterized=True,
         )
+        im.set_clim(0.0, vmax)
+        if im0 is None:
+            im0 = im
+        axes.append(ax)
         ax.scatter(
             [KI_STAR], [VMAX_REF],
             s=55, marker="*", color="black", zorder=5,
@@ -129,9 +142,11 @@ def main() -> None:
             )
         ))
         _panel_label(ax, col, toxin)
-        cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label(r"$\Delta C_{\mathrm{ss}}$ (%)")
-        cbar.ax.grid(False)
+
+    cbar = fig.colorbar(im0, ax=axes, fraction=0.025, pad=0.02)
+    cbar.set_label(r"$\Delta C_{\mathrm{ss}}$ (%)")
+    cbar.ax.grid(False)
+    cbar.set_ticks(np.linspace(0.0, vmax, 6))
 
     name = "heatmap_ki_vmax_analytical"
     for folder in (_RESULTS, _PUB_FIG):
