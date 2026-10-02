@@ -126,6 +126,11 @@ def _cache_ok_for_slot(path: str, dose: float, n_doses: int) -> tuple[bool, str]
         return False, "missing IS_base"
     if not (CKD_IS_BASE_MIN <= IS_base <= CKD_IS_BASE_MAX):
         return False, f"IS_base={IS_base:.3f} (not CKD-5)"
+    pcs = _f(cache, "pCS_base")
+    if pcs is None and "pCS_all" in cache.files:
+        pcs = float(np.asarray(cache["pCS_all"]).reshape(-1)[0])
+    if pcs is not None and not (12.0 <= pcs <= 15.5):
+        return False, f"pCS_base={pcs:.3f} (old pKa, not ~13.7 blood)"
     return True, "ok"
 
 

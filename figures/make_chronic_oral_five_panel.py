@@ -222,11 +222,12 @@ def _refuse_if_not_ckd5(path: str, d, label: str) -> float:
         )
     pcs = _named_base(d, "pCS_base", "pCS_all")
     lo, hi = PCS_BLOOD_OK
-    if not (lo <= pcs <= hi):
+    pcs_arr0 = float(np.asarray(d["pCS_all"]).reshape(-1)[0])
+    if not (lo <= pcs <= hi) or not (lo <= pcs_arr0 <= hi):
         raise RuntimeError(
-            f"{label}: pCS_base={pcs:.3f} mg/L blood is not the pKa=−2 SS "
-            f"({lo:.1f}–{hi:.1f}; expected ~13.7). File={fname}. "
-            "This is an old pKa=6.9 cache — delete it and re-run the 30-day ODE."
+            f"{label}: pCS_base={pcs:.3f} pCS_all[0]={pcs_arr0:.3f} mg/L blood "
+            f"is not the pKa=−2 SS ({lo:.1f}–{hi:.1f}; expected ~13.7). "
+            f"File={fname}. Delete the old pKa=6.9 cache and re-run."
         )
     mode = None
     if hasattr(d, "files") and "MODE_CODE" in d.files:
@@ -245,14 +246,25 @@ def _refuse_if_not_ckd5(path: str, d, label: str) -> float:
 
 def _arrays_from_cache(path: str, label: str) -> dict:
     d = np.load(path, allow_pickle=False)
-    need = ("t_all", "IS_all", "HA_all", "pCS_all", "drg_all")
+    need = ("t_all", "IS_all", "pCS_all", "drg_all")
     missing = [k for k in need if k not in d.files]
     if missing:
         raise FileNotFoundError(f"{os.path.basename(path)} missing {missing}")
     is_base = _refuse_if_not_ckd5(path, d, label)
+    t = np.asarray(d["t_all"])
     out = {k: np.asarray(d[k]) for k in need}
+    if "HA_all" in d.files:
+        out["HA_all"] = np.asarray(d["HA_all"])
+        ha0 = _named_base(d, "HA_base", "HA_all")
+    else:
+        ha0 = float(CP.TOX2_BASE.get("BP", 0.84)) * 142.86
+        if "HA_base" in getattr(d, "files", ()):
+            ha0 = float(np.asarray(d["HA_base"]).flat[0])
+        out["HA_all"] = np.full_like(t, ha0, dtype=float)
+        print(f"  [warn] {os.path.basename(path)} has no HA_all — "
+              f"HA panel uses constant {ha0:.2f} mg/L blood", flush=True)
     out["IS_base"] = np.array([is_base])
-    out["HA_base"] = np.array([_named_base(d, "HA_base", "HA_all")])
+    out["HA_base"] = np.array([ha0])
     out["pCS_base"] = np.array([_named_base(d, "pCS_base", "pCS_all")])
     return out
 
@@ -407,9 +419,9 @@ def plot(runs) -> plt.Figure:
     }
 
     top = (
-        (axA, "IS_all", "IS plasma\n(mg/L)", "A  IS"),
-        (axB, "pCS_all", "pCS plasma\n(mg/L)", "B  pCS"),
-        (axC, "HA_all", "HA plasma\n(mg/L)", "C  HA"),
+        (axA, "IS_all", "IS plasma\n(mg/L)", "A) IS"),
+        (axB, "pCS_all", "pCS plasma\n(mg/L)", "B) pCS"),
+        (axC, "HA_all", "HA plasma\n(mg/L)", "C) HA"),
     )
     for ax, key, ylab, letter in top:
         c0 = bases_pl[key]
@@ -455,7 +467,7 @@ def plot(runs) -> plt.Figure:
     axD.set_xlim(27, 30)
     _style(axD)
     axD.spines["right"].set_visible(False)
-    _panel_title(axD, "D")
+    _panel_title(axD, "D)")
 
     for label, data, ls, c, lw in runs:
         t = np.asarray(data["t_all"])
@@ -473,7 +485,7 @@ def plot(runs) -> plt.Figure:
     axE.set_xlim(0, 24)
     _style(axE)
     axE.spines["right"].set_visible(False)
-    _panel_title(axE, "E")
+    _panel_title(axE, "E)")
 
     handles, labels = axA.get_legend_handles_labels()
     fig.legend(
@@ -543,6 +555,20 @@ def main() -> None:
         )
     runs = [(lab, _run_to_plasma(data, bp), *rest) for lab, data, *rest in runs]
     _check_baselines_consistent(runs)
+    nodrug = next(d for lab, d, *_ in runs if "No-drug" in lab)
+    pcs_pl = float(np.asarray(nodrug["pCS_base"]).flat[0])
+    is_pl = float(np.asarray(nodrug["IS_base"]).flat[0])
+    ha_pl = float(np.asarray(nodrug["HA_base"]).flat[0])
+    print(
+        f"  Plasma t=0  IS={is_pl:.2f}  HA={ha_pl:.2f}  pCS={pcs_pl:.2f} mg/L "
+        f"(Table 1: 28.16 / 142.86 / 24.99)",
+        flush=True,
+    )
+    if not (22.0 <= pcs_pl <= 28.0):
+        raise RuntimeError(
+            f"pCS plasma baseline {pcs_pl:.2f} mg/L is not ~24.99 "
+            "(old pKa cache still in the plot)."
+        )
     print("================================================\n", flush=True)
 
     fig = plot(runs)
