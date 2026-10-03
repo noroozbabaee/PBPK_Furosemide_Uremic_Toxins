@@ -400,12 +400,26 @@ def _run_mode(mode: str, dt: float = 0.1) -> dict:
 # SECTION 6 — Figure (4-panel)
 # ══════════════════════════════════════════════════════════════════════════════
 
-_COLORS = {"Healthy": "#3969AC", "CKD-5": "#C44E52"}
+# Greyscale (print): Healthy solid black; CKD-5 dashed mid-grey + hatch bars.
+_LINE = {
+    "Healthy": dict(color="#111111", ls="-",  lw=2.2),
+    "CKD-5":   dict(color="#666666", ls="--", lw=2.2),
+}
+_BAR = {
+    "Healthy": dict(facecolor="#4D4D4D", edgecolor="k", hatch=""),
+    "CKD-5":   dict(facecolor="#BDBDBD", edgecolor="k", hatch="//"),
+}
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Liberation Serif", "DejaVu Serif"],
+    "axes.unicode_minus": False,
+})
 
 
 def plot_furosemide_pk(pk_data: dict) -> plt.Figure:
     """
-    Four-panel figure:
+    Four-panel greyscale figure (same layout as the manuscript screenshot):
       A — plasma concentration, linear scale
       B — plasma concentration, semi-log (shows terminal slope)
       C — cumulative urinary excretion
@@ -421,41 +435,44 @@ def plot_furosemide_pk(pk_data: dict) -> plt.Figure:
     ax_ae  = fig.add_subplot(gs[1, 0])
     ax_bar = fig.add_subplot(gs[:, 2])
 
+    for ax in (ax_lin, ax_log, ax_ae, ax_bar):
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
     # Panels A & B
     for label, d in pk_data.items():
-        col = _COLORS[label]
-        ax_lin.plot(d["t"], d["C"], color=col, lw=2.2, label=label)
+        st = _LINE[label]
+        ax_lin.plot(d["t"], d["C"], label=label, **st)
         ax_log.semilogy(d["t"], np.clip(d["C"], 1e-6, None),
-                        color=col, lw=2.2, label=label)
+                        label=label, **st)
 
     for ax in (ax_lin, ax_log):
-        ax.axvline(2.0, color="grey", ls=":", lw=1.2, label="End infusion")
+        ax.axvline(2.0, color="0.55", ls=":", lw=1.2)
         ax.set_xlabel("Time (h)", fontsize=11)
-        ax.grid(True, alpha=0.3)
+        ax.grid(True, alpha=0.25, color="0.7")
 
     ax_lin.set_ylabel("Plasma concentration (mg/L)", fontsize=11)
     ax_log.set_ylabel("Plasma concentration (mg/L, log)", fontsize=11)
     ax_lin.text(0.03, 0.95, "A", transform=ax_lin.transAxes,
-                fontweight="bold", fontsize=13, va="top")
+                fontweight="bold", fontsize=14, va="top")
     ax_log.text(0.03, 0.95, "B", transform=ax_log.transAxes,
-                fontweight="bold", fontsize=13, va="top")
+                fontweight="bold", fontsize=14, va="top")
 
     # Panel C
     for label, d in pk_data.items():
-        ax_ae.plot(d["t"], d["Ae"], color=_COLORS[label], lw=2.2, label=label)
-    ax_ae.axvline(2.0, color="grey", ls=":", lw=1.2)
+        ax_ae.plot(d["t"], d["Ae"], label=label, **_LINE[label])
+    ax_ae.axvline(2.0, color="0.55", ls=":", lw=1.2)
     ax_ae.set_xlabel("Time (h)", fontsize=11)
     ax_ae.set_ylabel("Cumulative urinary excretion (mg)", fontsize=11)
-    ax_ae.grid(True, alpha=0.3)
+    ax_ae.grid(True, alpha=0.25, color="0.7")
     ax_ae.text(0.03, 0.95, "C", transform=ax_ae.transAxes,
-               fontweight="bold", fontsize=13, va="top")
+               fontweight="bold", fontsize=14, va="top")
 
     # Panel D
     metrics_cfg = [
         ("CL_R_L_per_h", "CL_R (L/h)", "CL_R"),
         ("t_half_h",     "t½ (h)",     "t_half"),
     ]
-    labels  = list(pk_data.keys())
     x       = np.arange(len(metrics_cfg))
     w       = 0.32
     offsets = (-w/2, w/2)
@@ -464,7 +481,7 @@ def plot_furosemide_pk(pk_data: dict) -> plt.Figure:
     for i, (label, d) in enumerate(pk_data.items()):
         vals = [d["metrics"].get(k, np.nan) for k, _, _ in metrics_cfg]
         bars = ax_bar.bar(x + offsets[i], vals, w,
-                          label=label, color=_COLORS[label], alpha=0.85)
+                          label=label, **_BAR[label])
         for bar, val in zip(bars, vals):
             if not np.isnan(val):
                 ax_bar.text(bar.get_x() + bar.get_width()/2,
@@ -483,14 +500,14 @@ def plot_furosemide_pk(pk_data: dict) -> plt.Figure:
     ax_bar.set_xticks(x)
     ax_bar.set_xticklabels([lbl for _, lbl, _ in metrics_cfg], fontsize=11)
     ax_bar.set_ylabel("Value", fontsize=11)
-    ax_bar.grid(True, axis="y", alpha=0.3)
+    ax_bar.grid(True, axis="y", alpha=0.25, color="0.7")
     ax_bar.text(0.03, 0.97, "D", transform=ax_bar.transAxes,
-                fontweight="bold", fontsize=13, va="top")
+                fontweight="bold", fontsize=14, va="top")
     ax_bar.set_title("PK metrics vs literature\n(error bars = target range)",
                      fontsize=10)
 
     handles, lbls = ax_lin.get_legend_handles_labels()
-    fig.legend(handles, lbls, loc="upper center", ncol=3, frameon=False,
+    fig.legend(handles, lbls, loc="upper center", ncol=2, frameon=False,
                bbox_to_anchor=(0.5, 1.00), fontsize=11)
     fig.suptitle("Furosemide PK: Healthy vs CKD-5  (120 mg IV, 2 h infusion)",
                  fontsize=13, fontweight="bold", y=1.02)
@@ -561,10 +578,13 @@ def main():
         data_c["label"]: {k: data_c[k] for k in ("t", "C", "Ae", "metrics")},
     }
     fig = plot_furosemide_pk(pk_data)
-    for ext in ("png", "pdf"):
-        path = os.path.join(out_dir, f"furosemide_pk_healthy_vs_ckd5.{ext}")
-        fig.savefig(path, dpi=300, bbox_inches="tight")
-        print(f"  Saved: {path}")
+    pub_dir = os.path.join(_THIS_DIR, "..", "publication_code", "Figures")
+    os.makedirs(pub_dir, exist_ok=True)
+    for dest in (out_dir, pub_dir):
+        for ext in ("png", "pdf"):
+            path = os.path.join(dest, f"furosemide_pk_healthy_vs_ckd5.{ext}")
+            fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.04)
+            print(f"  Saved: {path}")
     plt.close(fig)
 
 
