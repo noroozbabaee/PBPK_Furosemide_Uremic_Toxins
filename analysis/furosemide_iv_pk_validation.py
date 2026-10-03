@@ -103,24 +103,25 @@ T_PK_H:       float = 24.0      # PK window: captures ≥4 half-lives for both m
 #   (Eur J Clin Pharmacol 26(2):197–207); Andreasen 1983 67% of
 #   CLS 170 mL/min ≈ 6.8 L/h. Typical = mean of those two.
 _LIT = {
+    # Dose-independent targets (linear PK). Cmax/AUC depend on dose -> not validated.
     "healthy": {
-        "Cmax":   (8.0,  12.0,  10.0),
-        "CL_R":   (4.0,   7.0,   6.9),
-        "t_half": (0.9,   1.5,   1.2),
-        "AUC":    (3.0,   6.0,   4.5),
+        "CL_R":   (4.0, 7.0, 6.9),    # Benet 1979; Hammarlund 1984 7.0; Andreasen 1983 6.8 L/h
+        "t_half": (0.8, 1.5, 1.2),    # Andreasen 1983: 70 +/- 20 min
+        "Cmax":   (float("nan"),) * 3,
+        "AUC":    (float("nan"),) * 3,
     },
     "ckd5": {
-        "Cmax":   (3.0,   6.0,   4.5),
-        "CL_R":   (1.0,   2.0,   1.5),
-        "t_half": (3.8,   6.0,   5.0),
-        "AUC":   (15.0,  30.0,  22.0),
+        "CL_R":   (0.1, 0.5, 0.25),   # Rane 1978 (converted, 70 kg)
+        "t_half": (2.0, 4.0, 2.6),    # Beermann 1977 ~2.6 h; Rane 1978 ~3-fold vs healthy
+        "Cmax":   (float("nan"),) * 3,
+        "AUC":    (float("nan"),) * 3,
     },
 }
 
 # Expected CKD-5 values after ROUND 5 corrections in compound_parameters.py
 _CKD5_EXPECTED = {
     "k_elim_hinv":      0.12,    # h-1 (t½ = 5.8 h; Andreasen 1983)
-    "Vmax_baso_uptake": 675.0,   # mg/h (4500 × 0.15; Naud 2011)
+    "Vmax_baso_uptake": 225.0,   # 4500 x 0.05 -- value used for the paper (Table 2)
     "Vmax_api_secr":    750.0,   # mg/h (5000 × 0.15)
     "fu_p":             0.05,    # Takamura 1997
 }
@@ -225,7 +226,7 @@ def _apply_drug_params(mode: str) -> dict:
                 "CKD-5 drug parameters NOT applied correctly:\n"
                 + "\n".join(failures)
                 + "\n\nCheck compound_parameters.py ROUND 5 section and "
-                "that _CKD_SCALES['drug']['baso']=0.15, k_elim_hinv=0.12.")
+                "that _CKD_SCALES['drug']['baso']=0.05, k_elim_hinv=0.12.")
         print(f"\n  [✓ CKD-5 ASSERTIONS PASSED]")
         print(f"    k_elim = {C.drug['k_elim_hinv']:.3f} h-1  "
               f"(t½ = {0.693/C.drug['k_elim_hinv']:.2f} h)")
@@ -253,7 +254,7 @@ def _apply_drug_params(mode: str) -> dict:
 
 def _extract_curves(sol):
     t      = np.asarray(sol.t,               dtype=float)
-    Cc     = np.asarray(sol.y[IDX["C_ven"]], dtype=float)
+    Cc     = np.asarray(sol.y[IDX["C_ven"]], dtype=float) / float(C.drug.get("BP", 0.82))  # blood -> plasma
     Ae_raw = np.asarray(sol.y[IDX["Ae_drg"]],dtype=float)
     Ae     = Ae_raw - Ae_raw[0]
     return t, Cc, Ae
@@ -328,6 +329,9 @@ def _validate(metrics: dict, mode: str):
         ("t½   (h)",      metrics["t_half_h"],        lit["t_half"]),
         ("AUC  (mg·h/L)", metrics["AUC_mg_h_per_L"], lit["AUC"]),
     ]:
+        if np.isnan(lo):
+            print(f"  -  {name:<18} = {val:.3f}   (no sourced literature target)")
+            continue
         if np.isnan(val):
             print(f"  ?  {name:<18} = N/A    (target {typ:.1f}, range {lo}–{hi})")
         else:
