@@ -2,10 +2,10 @@
 Kidney PBPK Model — clearance flux decomposition driver [ScenarioManager-compatible]
 
 Scenarios (each launched from steady-state):
-  1) Healthy — No Drug
-  2) Healthy — With Drug
-  3) CKD-5  — No Drug
-  4) CKD-5  — With Drug
+  1) Healthy — No Furosemide
+  2) Healthy — With Furosemide
+  3) CKD-5  — No Furosemide
+  4) CKD-5  — With Furosemide
 
 Decomposes total renal clearance for furosemide and each uremic toxin
 (IS, HA, pCS) into its OAT1-mediated active-transport and passive-diffusion
@@ -33,38 +33,40 @@ import datetime
 from typing import Dict, Tuple, Optional, Sequence
 
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
 
-# ── Path bootstrap ──────────────────────────────────────────────────────────
-# This script lives in analysis/. The core PBPK engine lives in ../src/.
+# Always the repo-root src/ (not publication_code/src), same as the five-panel.
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_SRC_DIR  = os.path.join(_THIS_DIR, "..", "src")
+_PARENT = os.path.abspath(os.path.join(_THIS_DIR, ".."))
+_ROOT = (
+    os.path.abspath(os.path.join(_PARENT, ".."))
+    if os.path.basename(_PARENT) == "publication_code"
+    else _PARENT
+)
+_SRC_DIR = os.path.join(_ROOT, "src")
+_RESULTS = os.path.join(_ROOT, "results")
+_PUB_FIG = os.path.join(_ROOT, "publication_code", "Figures")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
 
 from simulation import run_sim
 from scenario_manager import set_scenario
 from state_vector import IDX
 import constants as K
-
-# "plotting" is an OPTIONAL internal styling/saving helper module that is
-# not part of this open-science package (it provided house-style figure
-# formatting in the original lab environment). It is not required — every
-# call site below already checks hasattr(plotting, ...) before using it,
-# and falls back to plain matplotlib fig.savefig() if unavailable. We make
-# the import itself optional here so the script runs standalone.
-try:
-    import plotting
-except ImportError:
-    class _NoPlotting:
-        """Stand-in so hasattr(plotting, 'x') checks below resolve to False
-        and every call site falls back to plain matplotlib behavior."""
-        pass
-    plotting = _NoPlotting()
-
 import physiology as phys
-
 import compounds as C
 import compound_parameters as CP
+from toxin_display_order import (
+    TOXIN_DISPLAY_ORDER,
+    assert_toxin_display_order,
+)
+
+# Do not import an external "plotting" helper — it silently changes fonts.
 
 # ---------------------------------------------------------------------
 # Config
@@ -72,7 +74,7 @@ import compound_parameters as CP
 DURATION_SS_H   = 1500.0
 DURATION_MAIN_H = 12.0
 CKD_SCALE       = 0.10
-TIME_WINDOW     = (6.0, 12.0)
+TIME_WINDOW     = (0.0, 12.0)
 
 # REMOVED: CP.set_ckd_vmax_scales(baso_scale=0.15, apical_scale=0.40)
 # REMOVED: _ = CP.get_compound_parameters("ckd5")
@@ -84,11 +86,17 @@ TIME_WINDOW     = (6.0, 12.0)
 if hasattr(K, "set_ckd_scale"):
     K.set_ckd_scale(CKD_SCALE)
 
+BP_TOX = {
+    "IS": float(CP.TOX1_BASE.get("BP", 0.70)),
+    "HA": float(CP.TOX2_BASE.get("BP", 0.84)),
+    "pCS": float(CP.TOX3_BASE.get("BP", 0.55)),
+}
+# C0 in this repo is the healthy ODE-state guess (blood C_tox*_cen), not Table 1 plasma.
 BASELINE_IC = {
     "C_ven": 0.0,
-    "C_tox1_cen": 0.5,     # IS healthy SS target
-    "C_tox2_cen": 5.0,     # HA healthy SS target  (was 3.0 — corrected)
-    "C_tox3_cen": 0.7,     # pCS healthy SS target (was 1.84 — corrected)
+    "C_tox1_cen": float(CP.TOX1_BASE.get("C0", 0.5)),
+    "C_tox2_cen": float(CP.TOX2_BASE.get("C0", 3.0)),
+    "C_tox3_cen": float(CP.TOX3_BASE.get("C0", 0.7)),
     "C_bladder": 0.0,
     "Ae_drg": 0.0,
     "Ae_t1": 0.0,
@@ -100,16 +108,16 @@ BASELINE_IC = {
 # Greyscale palette + hatch patterns (COSMETIC ONLY)
 # ---------------------------------------------------------------------
 SCENARIO_COLORS = {
-    "Healthy No Drug":   "#4D4D4D",
-    "Healthy With Drug": "#9E9E9E",
-    "CKD-5 No Drug":     "#7A7A7A",
-    "CKD-5 With Drug":   "#BDBDBD",
+    "Healthy No Furosemide":   "#4D4D4D",
+    "Healthy With Furosemide": "#9E9E9E",
+    "CKD-5 No Furosemide":     "#7A7A7A",
+    "CKD-5 With Furosemide":   "#BDBDBD",
 }
 SCENARIO_HATCHES = {
-    "Healthy No Drug":   "",
-    "Healthy With Drug": "//",
-    "CKD-5 No Drug":     "xx",
-    "CKD-5 With Drug":   "..",
+    "Healthy No Furosemide":   "",
+    "Healthy With Furosemide": "//",
+    "CKD-5 No Furosemide":     "xx",
+    "CKD-5 With Furosemide":   "..",
 }
 
 DISPLAY_NAME = {
@@ -129,17 +137,42 @@ def _timestamp_dir(base: str) -> str:
     return path
 
 
+def _set_times() -> None:
+    available = {f.name for f in font_manager.fontManager.ttflist}
+    chosen = next(
+        (n for n in ("Times New Roman", "TimesNewRoman", "Nimbus Roman",
+                     "Liberation Serif", "Times") if n in available),
+        "serif",
+    )
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": [chosen, "Times New Roman", "Liberation Serif", "DejaVu Serif"],
+        "mathtext.fontset": "stix",
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": False,
+        "axes.titlesize": 16,
+        "axes.labelsize": 12,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+        "legend.fontsize": 12,
+        "axes.linewidth": 0.8,
+    })
+
+
 def _save(fig, outdir: str, name: str, exts=("png", "pdf"), dpi: int = 300) -> None:
     os.makedirs(outdir, exist_ok=True)
-    base = os.path.join(outdir, name)
-    if hasattr(plotting, "save_figure"):
-        try:
-            plotting.save_figure(fig, base, formats=list(exts), dpi=dpi)
-            return
-        except Exception as e:
-            print(f"(plotting.save_figure failed for '{name}': {e})")
-    for ext in exts:
-        fig.savefig(f"{base}.{ext}", dpi=dpi, bbox_inches="tight")
+    os.makedirs(_PUB_FIG, exist_ok=True)
+    for folder in (outdir, _PUB_FIG):
+        for ext in exts:
+            path = os.path.join(folder, f"{name}.{ext}")
+            fig.savefig(
+                path, dpi=dpi, bbox_inches="tight", pad_inches=0.04,
+                facecolor="white", edgecolor="none",
+            )
+            print(f"  Saved {path}")
 
 
 def _steady_state_check(sol, label: str, rel_cv_thresh: float = 0.01) -> bool:
@@ -255,9 +288,10 @@ def compute_fluxes_for_scenario_drug(
         "sign_convention":     {"basolateral_passive": "+ = vascular→cell"},
     }
 
-    Cpl = {"IS": val("C_tox1_cen"), "HA": val("C_tox2_cen"), "pCS": val("C_tox3_cen")}
+    C_blood = {"IS": val("C_tox1_cen"), "HA": val("C_tox2_cen"), "pCS": val("C_tox3_cen")}
     for sp in ["IS", "HA", "pCS"]:
-        flux["filtration"][sp] = Q_GFR * fu_over_BP(TOX[sp]) * Cpl[sp]
+        # C_tox*_cen is total blood; Cu_plasma = C_blood × fu_p / BP
+        flux["filtration"][sp] = Q_GFR * fu_over_BP(TOX[sp]) * C_blood[sp]
 
     PASS = {
         "IS":  getattr(C, "TOX1_PASS", None),
@@ -344,20 +378,18 @@ def compute_flux_contributions_percent(flux: Dict, species=("IS", "HA", "pCS", "
 # ---------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------
-def plot_flux_panels(flux_by_scenario, *, species, title, outpath=None):
-    import matplotlib.pyplot as plt
-    if hasattr(plotting, "setup_professional_style"):
-        try: plotting.setup_professional_style()
-        except Exception: pass
-
+def plot_flux_panels(flux_by_scenario, *, species, title=None, outpath=None):
+    assert_toxin_display_order(species)
+    _set_times()
     scenarios = list(flux_by_scenario.keys())
     panels = [
-        ("filtration",          "A) Filtration"),
-        ("basolateral_passive", "B) Basolateral passive diffusion"),
-        ("basolateral_uptake",  "C) Basolateral active uptake (OAT1)"),
-        ("apical_secretion",    "D) Apical secretion"),
+        ("filtration",          "A", "Glomerular filtration"),
+        ("basolateral_passive", "B", "Basolateral passive diffusion"),
+        ("basolateral_uptake",  "C", "Basolateral OAT1 uptake"),
+        ("apical_secretion",    "D", "Apical secretion"),
     ]
     fig, axes = plt.subplots(2, 2, figsize=(12, 7.6))
+    fig.patch.set_facecolor("white")
     axes = axes.ravel()
     xtick_labels = [DISPLAY_NAME.get(sp, sp) for sp in species]
     x = np.arange(len(species), dtype=float)
@@ -365,22 +397,23 @@ def plot_flux_panels(flux_by_scenario, *, species, title, outpath=None):
     left0 = x - (len(scenarios) - 1) * width / 2.0
     handles_for_legend = None
 
-    for ax, (key, ptitle) in zip(axes, panels):
-        ax.set_title(ptitle)
+    for ax, (key, letter, subtitle) in zip(axes, panels):
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.grid(False)
         ax.set_xticks(x)
         ax.set_xticklabels(xtick_labels)
-        ax.set_xlabel("PBUTs" if "DRUG" not in species else "")
-        ax.grid(axis="y", alpha=0.25)
+        ax.set_xlabel("")
         if key == "basolateral_passive":
-            ax.axhline(0.0, color="black", linewidth=0.8, alpha=0.7)
             ax.set_yscale("symlog", linthresh=1e-4)
             ax.set_ylabel("Flux (mg/h)\n(symmetric log scale)")
         else:
             ax.set_ylabel("Flux (mg/h)")
-            ax.ticklabel_format(axis="y", style="sci", scilimits=(-3, 3))
+        ax.set_title(f"{letter}  {subtitle}", loc="left",
+                     fontsize=16, fontweight="bold", pad=6)
         handles = []
         for j, sc in enumerate(scenarios):
-            vals  = [float(flux_by_scenario[sc][key].get(sp, 0.0)) for sp in species]
+            vals = [float(flux_by_scenario[sc][key].get(sp, 0.0)) for sp in species]
             rects = ax.bar(
                 left0 + j * width, vals, width, label=sc,
                 color=SCENARIO_COLORS.get(sc, "#999999"),
@@ -391,27 +424,41 @@ def plot_flux_panels(flux_by_scenario, *, species, title, outpath=None):
         if handles_for_legend is None:
             handles_for_legend = handles
 
-    fig.suptitle(title, fontsize=12)
     if handles_for_legend is not None:
-        fig.legend(handles_for_legend, scenarios,
-                   loc="lower center", ncol=min(4, len(scenarios)),
-                   frameon=False, fontsize=17,
-                   bbox_to_anchor=(0.5, -0.02),
-                   columnspacing=2.2, handlelength=2.6)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
+        fig.legend(
+            handles_for_legend, scenarios,
+            loc="lower center", ncol=min(4, len(scenarios)),
+            frameon=False, fontsize=12,
+            bbox_to_anchor=(0.5, -0.02),
+            columnspacing=2.2, handlelength=2.6,
+        )
+    fig.tight_layout(rect=[0, 0.10, 1, 1])
     if outpath:
-        fig.savefig(outpath, dpi=300, bbox_inches="tight")
+        fig.savefig(outpath, dpi=300, bbox_inches="tight", pad_inches=0.04)
     return fig
 
 
 # ---------------------------------------------------------------------
 # Steady-state and scenario runs
 # ---------------------------------------------------------------------
+def _print_ss(sol, label: str) -> None:
+    b_is = float(sol.y[IDX["C_tox1_cen"]][-1])
+    b_ha = float(sol.y[IDX["C_tox2_cen"]][-1])
+    b_pcs = float(sol.y[IDX["C_tox3_cen"]][-1])
+    print(f"  {label} blood  IS={b_is:.3f}  HA={b_ha:.3f}  pCS={b_pcs:.3f} mg/L")
+    print(f"  {label} plasma IS={b_is/BP_TOX['IS']:.3f}  "
+          f"HA={b_ha/BP_TOX['HA']:.3f}  pCS={b_pcs/BP_TOX['pCS']:.3f} mg/L")
+    if "CKD" in label and b_is < 8.0:
+        raise RuntimeError(
+            f"{label} IS_blood={b_is:.3f} looks healthy (~0.54), not CKD-5 (~19.7). "
+            "Aborting — check src/compound_parameters.py CKD scales."
+        )
+
+
 def reach_steady_state():
     print("\n=== Steady-state (NO DRUG) ===")
-    if hasattr(plotting, "setup_professional_style"):
-        try: plotting.setup_professional_style()
-        except Exception: pass
+    print(f"  Using src: {_SRC_DIR}")
+    K.VERBOSE = False
     if hasattr(C, "initialize_compounds"):
         C.initialize_compounds("healthy")
 
@@ -427,82 +474,73 @@ def reach_steady_state():
 
     _steady_state_check(sol_H_ss, "Healthy", rel_cv_thresh=0.01)
     _steady_state_check(sol_C_ss, "CKD-5",  rel_cv_thresh=0.01)
-
-    print("\nSS (final plasma, mg/L):")
-    print(f"  Healthy → IS={sol_H_ss.y[IDX['C_tox1_cen']][-1]:.3f}  "
-          f"HA={sol_H_ss.y[IDX['C_tox2_cen']][-1]:.3f}  "
-          f"pCS={sol_H_ss.y[IDX['C_tox3_cen']][-1]:.3f}")
-    print(f"  CKD-5  → IS={sol_C_ss.y[IDX['C_tox1_cen']][-1]:.3f}  "
-          f"HA={sol_C_ss.y[IDX['C_tox2_cen']][-1]:.3f}  "
-          f"pCS={sol_C_ss.y[IDX['C_tox3_cen']][-1]:.3f}")
+    print("\nSS (C_tox*_cen is total blood; plasma = blood/BP):")
+    _print_ss(sol_H_ss, "Healthy")
+    _print_ss(sol_C_ss, "CKD-5")
     return sol_H_ss, sol_C_ss
 
 
 def run_main_scenarios(sol_H_ss, sol_C_ss):
+    """Run each 12 h arm and score fluxes immediately (live compound dicts).
+
+    Do not wait until all four ODEs finish: compute_fluxes reads C.tox1 Vmax
+    from globals. After a CKD-5 run those globals stay CKD-scaled, so a
+    later loop over healthy trajectories reused CKD Vmax (uptake:apical 1:3).
+    """
     scenarios = {
-        "Healthy No Drug":  dict(scenario_name="H_NO_DRUG",      mode="healthy", ic=_ic_from_solution(sol_H_ss)),
-        "Healthy With Drug":dict(scenario_name="H_WITH_DRUG",    mode="healthy", ic=_ss_to_drug_start_ic(sol_H_ss)),
-        "CKD-5 No Drug":    dict(scenario_name="CKD_NO_DRUG",    mode="ckd5",    ic=_ic_from_solution(sol_C_ss)),
-        "CKD-5 With Drug":  dict(scenario_name="CKD_WITH_DRUG",  mode="ckd5",    ic=_ss_to_drug_start_ic(sol_C_ss)),
+        "Healthy No Furosemide":   dict(scenario_name="H_NO_DRUG",     mode="healthy", ic=_ic_from_solution(sol_H_ss)),
+        "Healthy With Furosemide": dict(scenario_name="H_WITH_DRUG",   mode="healthy", ic=_ss_to_drug_start_ic(sol_H_ss)),
+        "CKD-5 No Furosemide":     dict(scenario_name="CKD_NO_DRUG",   mode="ckd5",    ic=_ic_from_solution(sol_C_ss)),
+        "CKD-5 With Furosemide":   dict(scenario_name="CKD_WITH_DRUG", mode="ckd5",    ic=_ss_to_drug_start_ic(sol_C_ss)),
     }
-    solutions = {}
-    meta      = {}
+    solutions, meta, flux = {}, {}, {}
     for label, sc in scenarios.items():
         print(f"\n▶ Running {label} ({DURATION_MAIN_H:.1f} h from SS)")
         set_scenario(sc["scenario_name"])
         sol = run_sim(DURATION_MAIN_H, custom_initial_conds=sc["ic"],
                       mode=sc["mode"], reset_compounds=False)
+        flux[label] = compute_fluxes_for_scenario_drug(
+            sol, mode=sc["mode"], time_window=TIME_WINDOW, include_drug=True)
+        print(f"    IS Vmax_baso = {C.tox1.get('Vmax_baso_uptake', float('nan')):.4g}   "
+              f"IS fu_p = {C.tox1.get('fu_p', float('nan')):.3f}")
         solutions[label] = sol
-        meta[label]      = {"mode": sc["mode"], "scenario_name": sc["scenario_name"]}
-    return solutions, meta
+        meta[label] = {"mode": sc["mode"], "scenario_name": sc["scenario_name"]}
+    return solutions, meta, flux
 
 
 # ---------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
 def main() -> Dict[str, object]:
-    if hasattr(plotting, "setup_professional_style"):
-        try: plotting.setup_professional_style()
-        except Exception: pass
-
-    outdir = _timestamp_dir(os.path.join(_THIS_DIR, "..", "results", "flux_decomposition"))
+    K.VERBOSE = False
+    _set_times()
+    outdir = _timestamp_dir(os.path.join(_RESULTS, "flux_decomposition"))
 
     sol_H_ss, sol_C_ss = reach_steady_state()
-    solutions, meta    = run_main_scenarios(sol_H_ss, sol_C_ss)
+    solutions, meta, flux_data_all = run_main_scenarios(sol_H_ss, sol_C_ss)
 
-    flux_data_all = {}
-    for name, sol in solutions.items():
-        flux_data_all[name] = compute_fluxes_for_scenario_drug(
-            sol, mode=meta[name]["mode"],
-            time_window=TIME_WINDOW, include_drug=True)
-
-    fig_tox = plot_flux_panels(flux_data_all, species=("IS", "HA", "pCS"),
-        title=f"Renal flux decomposition (PBUTs) — mean over t in [{TIME_WINDOW[0]}, {TIME_WINDOW[1]}] h")
+    fig_tox = plot_flux_panels(flux_data_all, species=TOXIN_DISPLAY_ORDER)
     _save(fig_tox, outdir, "09_flux_decomposition_PBUTs_greyscale")
+    fig4 = os.path.join(_PUB_FIG, "Fig4.pdf")
+    fig_tox.savefig(
+        fig4, dpi=300, bbox_inches="tight", pad_inches=0.04,
+        facecolor="white", edgecolor="none",
+    )
+    print(f"  Saved {fig4}")
 
-    fig_drg = plot_flux_panels(flux_data_all, species=("DRUG",),
-        title=f"Renal flux decomposition (Furosemide) — mean over t in [{TIME_WINDOW[0]}, {TIME_WINDOW[1]}] h")
+    fig_drg = plot_flux_panels(flux_data_all, species=("DRUG",))
     _save(fig_drg, outdir, "10_flux_decomposition_furosemide_greyscale")
 
-    fig_all = plot_flux_panels(flux_data_all, species=("DRUG", "IS", "HA", "pCS"),
-        title=f"Renal flux decomposition (all) — mean over t in [{TIME_WINDOW[0]}, {TIME_WINDOW[1]}] h")
+    fig_all = plot_flux_panels(
+        flux_data_all, species=("DRUG",) + TOXIN_DISPLAY_ORDER)
     _save(fig_all, outdir, "11_flux_decomposition_all_greyscale")
 
-    print("\n=== Flux contribution (%) — absolute magnitudes ===")
-    for scen_name, flx in flux_data_all.items():
-        print(f"\n{scen_name}")
-        contrib = compute_flux_contributions_percent(flx, species=("IS", "HA", "pCS", "DRUG"))
-        for sp in ("IS", "HA", "pCS", "DRUG"):
-            c = contrib[sp]
-            print(f"  {DISPLAY_NAME.get(sp, sp)}: "
-                  f"Filt={c['filtration']:.1f}%, "
-                  f"Pass={c['basolateral_passive']:.1f}%, "
-                  f"Uptake={c['basolateral_uptake']:.1f}%, "
-                  f"Apical={c['apical_secretion']:.1f}%")
+    from flux_export import export_flux_results
+    export_flux_results(flux_data_all, outdir, TIME_WINDOW, pub_dir=_PUB_FIG)
 
     print("\nFigures saved to:", outdir)
     return {"solutions": solutions, "flux_data_all": flux_data_all,
-            "healthy_ss": sol_H_ss, "ckd_ss": sol_C_ss, "outdir": outdir}
+            "healthy_ss": sol_H_ss, "ckd_ss": sol_C_ss, "outdir": outdir, "meta": meta}
 
 
 if __name__ == "__main__":

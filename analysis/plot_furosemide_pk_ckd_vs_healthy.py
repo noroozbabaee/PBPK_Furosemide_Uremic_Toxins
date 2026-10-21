@@ -231,8 +231,8 @@ def validate_against_literature(metrics, mode):
     """Compare model predictions with literature."""
     lit = {
         "healthy": {
-            "CL_R": (6.0, 10.0, 8.0),
-            "t_half": (0.25, 0.60, 0.35),
+            "CL_R": (4.0, 7.0, 6.9),
+            "t_half": (0.9, 1.5, 1.2),
             "AUC": (3.0, 5.5, 4.0),
         },
         "ckd5": {

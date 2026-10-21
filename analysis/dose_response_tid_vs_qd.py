@@ -96,6 +96,8 @@ import constants as K
 # it is launched from.
 OUTPUT_DIR = os.path.join(_THIS_DIR, "..", "results")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+from datetime import date as _date
+RUN_DATE = _date.today().strftime("%Y%m%d")
 K.VERBOSE = False
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -104,6 +106,8 @@ K.VERBOSE = False
 # Targets the >120 mg/day category in CKD-REIN cohort.
 # Costes-Albrespic M et al. Kidney Int Rep 2025;10:2165.
 DOSING_REGIMEN = "TID"  # "TID" = 3×/day  |  "QD" = once-daily
+# When True, skip the paired once-daily run at the same daily total.
+SKIP_QD = False
 DOSE_PER_ADMIN = 80.0  # mg per administration
 N_DOSES_PER_DAY = 3  # 3 doses per day
 DOSE_INTERVAL_H = 8.0  # h between doses (24h / 3 = 8h)
@@ -138,7 +142,9 @@ KM_pCS = 22.58  # mg/L — Watanabe H et al. Kidney Int 2014;86:840
 FU_P_IS = 0.10  # Deltombe O et al. Toxins 2015;7:3933 (CKD-5)
 FU_P_pCS = 0.05  # Deltombe O et al. Toxins 2015;7:3933 (CKD-5)
 BP_IS = 0.70  # from compound_parameters.py
+BP_HA = 0.84
 BP_pCS = 0.55  # from compound_parameters.py
+FU_P_HA = 0.52
 
 # Clinical reference values — literature constants (correct to hardcode)
 CLIN_IS_PCT = 31.9  # % — Costes-Albrespic 2025
@@ -176,7 +182,7 @@ def _cache_path() -> str:
     return os.path.join(
         OUTPUT_DIR,
         f"chronic_oral_cache_"
-        f"Ki{ki_str}_dose{dose_str}mg_x{N_DOSES_PER_DAY}pd_{N_DAYS}days.npz"
+        f"Ki{ki_str}_dose{dose_str}mg_x{N_DOSES_PER_DAY}pd_{N_DAYS}days_{MODE}_{RUN_DATE}.npz"
     )
 
 
@@ -206,6 +212,12 @@ def _build_fingerprint(live_pk: dict) -> dict:
         BP_IS=BP_IS,
         BP_pCS=BP_pCS,
         MODE_CODE=5.0 if MODE == "ckd5" else 0.0,
+        # 1 = residual furosemide is carried across days (not zeroed at 24 h)
+        CHRONIC_CARRYOVER=1.0,
+        HA_TRACKED=1.0,
+        # pCS pKa = −2 (sulfate). Old caches used 6.9 and must not reload.
+        PKA_PCS=float(CP.TOX3_BASE["pKa"]) if hasattr(CP, "TOX3_BASE") else -2.0,
+        PKA_IS=float(CP.TOX1_BASE["pKa"]) if hasattr(CP, "TOX1_BASE") else -1.8,
         # Live PK — if model changes, these will differ and force re-run
         CL_FURO=live_pk["CL_FURO"],
         CL_R_IS=live_pk["CL_R_IS"],
@@ -227,12 +239,14 @@ def _cache_is_valid(cache_path: str, live_pk: dict) -> bool:
 
     fp = _build_fingerprint(live_pk)
     mismatches = []
+    if "HA_all" not in cache.files:
+        mismatches.append(("HA_all", "MISSING", "required"))
     for key, current_val in fp.items():
         if key not in cache.files:
             mismatches.append((key, "MISSING", current_val))
             continue
         cached_val = float(cache[key].flat[0])
-        if abs(cached_val - current_val) > 1e-9:
+        if abs(cached_val - current_val) > 1e-6:
             mismatches.append((key, cached_val, current_val))
 
     if mismatches:
@@ -373,8 +387,22 @@ def extract_baseline_pk(ic_ss: dict) -> dict:
     t_nd = sol_nd.t
 
     live_pk = {"CL_FURO": CL_FURO_live}
+    try:
+        import physiology as _phys
+        GFR_CKD5 = float(_phys.make_phys(MODE).get("Q_GFR", 0.72))
+    except Exception:
+        GFR_CKD5 = 0.72
+    fu_by_tox = {"IS": FU_P_IS, "HA": FU_P_HA, "pCS": FU_P_pCS}
+
+    def _foat_gfr(name, cl_r, bp):
+        cl_gfr = GFR_CKD5 * fu_by_tox[name]  # plasma CL_GFR = Q_GFR · fu_p
+        fo = max(0.0, min(0.99, 1.0 - cl_gfr / cl_r)) if cl_r > 1e-6 else 0.6
+        print(f"  [INFO] {name}: F_OAT1 from Q_GFR={GFR_CKD5:.3f} L/h = {fo:.3f}")
+        return fo
+
     toxin_map = [
         ("IS", "C_tox1_cen", "Ae_t1", "F_flux_OAT1_IS", BP_IS, "CL_R_IS", "F_OAT1_IS"),
+        ("HA", "C_tox2_cen", "Ae_t2", "F_flux_OAT1_HA", BP_HA, "CL_R_HA", "F_OAT1_HA"),
         ("pCS", "C_tox3_cen", "Ae_t3", "F_flux_OAT1_pCS", BP_pCS, "CL_R_pCS", "F_OAT1_pCS"),
     ]
 
@@ -382,9 +410,9 @@ def extract_baseline_pk(ic_ss: dict) -> dict:
         i_c = IDX.get(c_key)
         i_ae = IDX.get(ae_key)
         if i_c is None or i_ae is None:
-            print(f"  [WARN] {name}: indices not found — using fallback")
-            live_pk[cl_key] = 0.274 if name == "IS" else 0.086
-            live_pk[foat_out_key] = 0.631 if name == "IS" else 0.562
+            print(f"  [WARN] {name}: indices not found — using Table 1 CL_R")
+            live_pk[cl_key] = {"IS": 0.20, "HA": 0.49, "pCS": 0.08}[name]
+            live_pk[foat_out_key] = _foat_gfr(name, live_pk[cl_key], bp)
             continue
 
         C_tox = np.clip(sol_nd.y[i_c], 0, np.inf)
@@ -400,25 +428,22 @@ def extract_baseline_pk(ic_ss: dict) -> dict:
             # Average OAT1 fraction over simulation
             foat_vals = sol_nd.y[i_foat]
             foat_vals = foat_vals[foat_vals >= 0]
-            live_pk[foat_out_key] = float(np.mean(foat_vals)) if len(foat_vals) > 0 else \
-                (0.631 if name == "IS" else 0.562)
+            live_pk[foat_out_key] = (
+                float(np.mean(foat_vals)) if len(foat_vals) > 0
+                else _foat_gfr(name, CL_R, bp)
+            )
         else:
-            # Fallback: estimate from GFR
-            # CL_GFR = GFR_CKD5 × fu_p / BP (GFR_CKD5 ~ 0.1 L/h in our model)
-            # F_OAT1 = 1 - CL_GFR / CL_R
-            GFR_CKD5 = 0.1  # L/h approximate
-            CL_GFR = GFR_CKD5 * (FU_P_IS if name == "IS" else FU_P_pCS) / bp
-            F_OAT1 = max(0.0, min(0.99, 1.0 - CL_GFR / CL_R)) if CL_R > 1e-6 else 0.6
-            live_pk[foat_out_key] = F_OAT1
-            print(f"  [INFO] {name}: F_OAT1 estimated from GFR = {F_OAT1:.3f}")
+            live_pk[foat_out_key] = _foat_gfr(name, CL_R, bp)
 
     print(f"\n  LIVE PK VALUES (from ODE, no hardcoding):")
     print(f"  {'Parameter':<18} {'Value':>10}  {'Units'}")
     print("  " + "─" * 45)
-    print(f"  {'CL_FURO':<18} {live_pk['CL_FURO']:>10.4f}  L/h")
-    print(f"  {'CL_R_IS':<18} {live_pk['CL_R_IS']:>10.4f}  L/h")
+    print(f"  {'CL_FURO':<18} {live_pk['CL_FURO']:>10.4f}  L/h plasma")
+    print(f"  {'CL_R_IS':<18} {live_pk['CL_R_IS']:>10.4f}  L/h plasma")
     print(f"  {'F_OAT1_IS':<18} {live_pk['F_OAT1_IS']:>10.4f}  —")
-    print(f"  {'CL_R_pCS':<18} {live_pk['CL_R_pCS']:>10.4f}  L/h")
+    print(f"  {'CL_R_HA':<18} {live_pk['CL_R_HA']:>10.4f}  L/h plasma")
+    print(f"  {'F_OAT1_HA':<18} {live_pk['F_OAT1_HA']:>10.4f}  —")
+    print(f"  {'CL_R_pCS':<18} {live_pk['CL_R_pCS']:>10.4f}  L/h plasma")
     print(f"  {'F_OAT1_pCS':<18} {live_pk['F_OAT1_pCS']:>10.4f}  —")
     return live_pk
 
@@ -453,13 +478,18 @@ def build_oral_profile(dose_mg: float) -> list:
 # STEP 4 — ONE 24h CYCLE WITH TID DOSING
 # ═════════════════════════════════════════════════════════════════════════════
 def run_one_day_tid(ic: dict, day_offset_h: float,
-                    oral_segs: list) -> tuple:
+                    oral_segs: list, dose_times_h=None) -> tuple:
     """
-    Run one 24h day with TID dosing (3 doses at 0h, 8h, 16h).
+    Run one 24h day at the given clock times (TID 0/8/16 h or QD 0 h).
 
     Each dose uses the same oral absorption profile (oral_segs) shifted
     to its dose time. Between doses, the ODE runs with no drug input but
     competitive inhibition still active if furosemide is present.
+
+    Residual furosemide (C_ven, C_peri) is carried in `ic` from the previous
+    day. Do not zero those compartments here — that turned a QD run into a
+    fresh single dose every morning, and a TID run into three isolated doses
+    with no overnight leftover.
 
     Returns (t_array, y_array, ic_end_of_day)
     """
@@ -467,17 +497,37 @@ def run_one_day_tid(ic: dict, day_offset_h: float,
     t_all_day = []
     y_all_day = []
     ic_cur = copy.deepcopy(ic)
+    if dose_times_h is None:
+        dose_times_h = DOSE_TIMES_H
 
-    # Zero drug compartments at start of each day
-    # (toxin concentrations are carried over from previous day)
-    for key in ("C_ven", "C_peri", "Ae_drg", "C_bladder"):
-        if key in ic_cur:
-            ic_cur[key] = 0.0
+    if len(dose_times_h) == 0:
+        C.initialize_compounds(MODE)
+        _restore_ki()
+        dp, *_ = CP.get_compound_parameters(MODE)
+        for k, v in dp.items():
+            C.drug[k] = v
+        C.drug.update({
+            "enabled": True,
+            "IR": 0.0,
+            "t_inf_h": 0.0,
+            "t_start_h": 1e9,
+            "bolus_mg": 0.0,
+            "inhibit": False,
+        })
+        for attr in ("tox1", "tox2", "tox3"):
+            tox = getattr(C, attr, None)
+            if isinstance(tox, dict):
+                tox["enabled"] = True
+        sol = run_sim(t_end_h=TAU_H, mode=MODE, dt=DT_BETWEEN,
+                      custom_initial_conds=copy.deepcopy(ic_cur))
+        t_day = sol.t + day_offset_h
+        ic_end = {name: float(sol.y[i, -1]) for name, i in IDX.items()}
+        return t_day, sol.y, ic_end
 
     # Process each dose within the 24h day
-    for dose_idx, dose_time_h in enumerate(DOSE_TIMES_H):
+    for dose_idx, dose_time_h in enumerate(dose_times_h):
         # Determine end time for this dose's window
-        next_dose_h = DOSE_TIMES_H[dose_idx + 1] if dose_idx + 1 < len(DOSE_TIMES_H) \
+        next_dose_h = dose_times_h[dose_idx + 1] if dose_idx + 1 < len(dose_times_h) \
             else TAU_H
 
         # ── Phase A: absorption window for this dose ──────────────────────
@@ -569,14 +619,16 @@ def _analytical_ss_core(IS_base: float, pCS_base: float,
     entry points that use this core with each Css_furo source.
 
     Formula:
-        Cu_furo  = Css_furo × fu_p / BP
+        Cu_furo  = Css_furo_plasma × fu_p     (Css from Ae/AUC_plasma; no extra /BP)
         alpha    = 1 + Cu_furo / Ki
         s        = (Km + Cu_tox) / (alpha × Km + Cu_tox)
         CL_R_new = CL_GFR + CL_OAT1 × s
                  = CL_R × (1 - F_OAT1) + CL_R × F_OAT1 × s
         %change  = (CL_R / CL_R_new - 1) × 100
     """
-    Cu_furo = Css_furo * FU_P_FURO / BP_FURO
+    # CL_FURO is plasma CL (Ae/∫(C_ven/BP)dt), so Css_furo is plasma.
+    # ODE unbound conc. is C_plasma × fu_p = Css_plasma × fu_p (no extra /BP).
+    Cu_furo = Css_furo * FU_P_FURO
     alpha = 1.0 + Cu_furo / Ki
 
     results = {}
@@ -698,7 +750,7 @@ def print_results(IS_base, pCS_base, pct_IS, pct_pCS,
           f"  F_OAT1_pCS = {live_pk['F_OAT1_pCS']:.4f}")
 
     print(f"\n  FUROSEMIDE:")
-    print(f"  ODE avg (last cycle)         = {drg_avg:.4f} mg/L")
+    print(f"  ODE avg (last cycle)         = {drg_avg:.4f} mg/L plasma")
     print(f"  Analytical Css,avg           = {anal['IS']['Css_furo']:.4f} mg/L")
     print(f"  alpha (1 + Cu_furo/Ki)       = {anal['IS']['alpha']:.4f}")
     print(f"  s (IS, exact MM)             = {anal['IS']['s']:.4f}")
@@ -740,6 +792,16 @@ def plot_results(t_all, IS_all, pCS_all, drg_all,
                  t_last, IS_last, pCS_last, drg_last,
                  IS_base, pCS_base, pct_IS, pct_pCS,
                  anal, drg_avg, ode_at_sample, live_pk) -> None:
+    # Plot total plasma (ODE blood / BP). Caches remain blood.
+    IS_all = np.asarray(IS_all, dtype=float) / BP_IS
+    pCS_all = np.asarray(pCS_all, dtype=float) / BP_pCS
+    drg_all = np.asarray(drg_all, dtype=float) / BP_FURO
+    t_last = np.asarray(t_last, dtype=float)
+    IS_last = np.asarray(IS_last, dtype=float) / BP_IS
+    pCS_last = np.asarray(pCS_last, dtype=float) / BP_pCS
+    drg_last = np.asarray(drg_last, dtype=float) / BP_FURO
+    IS_base = float(IS_base) / BP_IS
+    pCS_base = float(pCS_base) / BP_pCS
     plt.rcParams.update({
         "font.family": "sans-serif", "font.size": 9,
         "axes.linewidth": 0.8,
@@ -811,8 +873,9 @@ def plot_results(t_all, IS_all, pCS_all, drg_all,
                   f"dose\n{dt_h:.0f}h", fontsize=6.5, color="#BA7517", va="top")
     ax_C.set_xlabel("Time after day start (h)")
     ax_C.set_ylabel("Furosemide plasma (mg/L)")
+    times_lab = "/".join(f"{h:.0f}h" for h in DOSE_TIMES_H) or "none"
     ax_C.set_title(f"C   Furosemide — last 24h cycle ({DOSING_REGIMEN}: "
-                   f"3×{DOSE_PER_ADMIN:.0f}mg at 0/8/16h)",
+                   f"{N_DOSES_PER_DAY}×{DOSE_PER_ADMIN:.0f}mg at {times_lab})",
                    fontweight="bold", loc="left", fontsize=8)
     ax_C.legend(fontsize=7.5, frameon=False)
     ax_C.set_xlim(0, TAU_H)
@@ -906,7 +969,7 @@ def plot_results(t_all, IS_all, pCS_all, drg_all,
     fig_stem = os.path.join(
         OUTPUT_DIR,
         f"chronic_oral_"
-        f"Ki{ki_str}_dose{dose_str}mg_x{N_DOSES_PER_DAY}pd_{N_DAYS}days"
+        f"Ki{ki_str}_dose{dose_str}mg_x{N_DOSES_PER_DAY}pd_{N_DAYS}days_{MODE}_{RUN_DATE}"
     )
     for ext in ("png", "pdf"):
         p = f"{fig_stem}.{ext}"
@@ -924,7 +987,7 @@ def _run_tag(dose_per_admin: float, n_doses: int, ki: float, n_days: int) -> str
     """Unique string tag for a given run configuration — used in filenames."""
     ki_str   = f"{ki:.4g}".replace(".", "p")
     dose_str = f"{dose_per_admin:.4g}"
-    return f"Ki{ki_str}_dose{dose_str}mg_x{n_doses}pd_{n_days}days"
+    return f"Ki{ki_str}_dose{dose_str}mg_x{n_doses}pd_{n_days}days_{MODE}_{RUN_DATE}"
 
 
 def _save_results_npz(tag: str,
@@ -1020,12 +1083,14 @@ def _run_simulation(ic_ss, live_pk,
                     oral_segs=None) -> tuple:
     """
     Run the N_DAYS TID/QD simulation for a given dosing configuration.
-    Returns (t_all, IS_all, pCS_all, drg_all).
+    Returns (t_all, IS_all, HA_all, pCS_all, drg_all).
     """
-    if oral_segs is None:
+    if oral_segs is None and n_doses > 0:
         oral_segs = build_oral_profile(dose_per_admin)
+    elif oral_segs is None:
+        oral_segs = []
 
-    all_t, all_IS, all_pCS, all_drg = [], [], [], []
+    all_t, all_IS, all_HA, all_pCS, all_drg = [], [], [], [], []
     ic_cur = copy.deepcopy(ic_ss)
     for key in ("C_ven", "C_peri", "Ae_drg", "C_bladder"):
         if key in ic_cur:
@@ -1037,10 +1102,13 @@ def _run_simulation(ic_ss, live_pk,
             print(f"    Day {day + 1:3d}: "
                   f"IS={ic_cur.get('C_tox1_cen', 0):.3f}  "
                   f"pCS={ic_cur.get('C_tox3_cen', 0):.3f} mg/L")
-        t_d, y_d, ic_cur = run_one_day_tid(ic_cur, t_off, oral_segs)
+        t_d, y_d, ic_cur = run_one_day_tid(
+            ic_cur, t_off, oral_segs, dose_times_h=dose_times_h)
         all_t.append(t_d)
         if "C_tox1_cen" in IDX:
             all_IS.append(y_d[IDX["C_tox1_cen"], :])
+        if "C_tox2_cen" in IDX:
+            all_HA.append(y_d[IDX["C_tox2_cen"], :])
         if "C_tox3_cen" in IDX:
             all_pCS.append(y_d[IDX["C_tox3_cen"], :])
         if "C_ven" in IDX:
@@ -1048,6 +1116,7 @@ def _run_simulation(ic_ss, live_pk,
 
     return (np.concatenate(all_t),
             np.concatenate(all_IS),
+            np.concatenate(all_HA),
             np.concatenate(all_pCS),
             np.concatenate(all_drg))
 
@@ -1062,7 +1131,7 @@ def _compute_metrics(t_all, IS_all, pCS_all, drg_all,
 
     IS_avg  = float(_trapz(IS_last,  t_last) / dt_last)
     pCS_avg = float(_trapz(pCS_last, t_last) / dt_last)
-    drg_avg = float(_trapz(drg_last, t_last) / dt_last)
+    drg_avg = float(_trapz(drg_last, t_last) / dt_last) / BP_FURO
 
     pct_IS  = (IS_avg  - IS_base)  / IS_base  * 100
     pct_pCS = (pCS_avg - pCS_base) / pCS_base * 100
@@ -1136,6 +1205,7 @@ def main():
         cache = np.load(cache_file_A, allow_pickle=False)
         t_all_A   = cache["t_all"]
         IS_all_A  = cache["IS_all"]
+        HA_all_A  = cache["HA_all"] if "HA_all" in cache.files else None
         pCS_all_A = cache["pCS_all"]
         drg_all_A = cache["drg_all"]
         print(f"  Loaded {len(t_all_A)} time points — skipping ODE run")
@@ -1145,7 +1215,7 @@ def main():
         print(f"  Running {N_DAYS} days × {N_DOSES_PER_DAY} doses/day "
               f"= {N_DAYS * N_DOSES_PER_DAY} total doses...")
         t0 = _time.perf_counter()
-        t_all_A, IS_all_A, pCS_all_A, drg_all_A = _run_simulation(
+        t_all_A, IS_all_A, HA_all_A, pCS_all_A, drg_all_A = _run_simulation(
             ic_ss, live_pk, DOSE_PER_ADMIN, N_DOSES_PER_DAY,
             DOSE_TIMES_H, oral_segs_A)
         elapsed_A = _time.perf_counter() - t0
@@ -1153,9 +1223,11 @@ def main():
               f"({elapsed_A/60:.1f} min)")
         # Save cache
         fp = _build_fingerprint(live_pk)
-        save_dict = {"t_all": t_all_A, "IS_all": IS_all_A,
+        ha_base = float(ic_ss.get("C_tox2_cen", np.asarray(HA_all_A).reshape(-1)[0]))
+        save_dict = {"t_all": t_all_A, "IS_all": IS_all_A, "HA_all": HA_all_A,
                      "pCS_all": pCS_all_A, "drg_all": drg_all_A,
                      "IS_base": np.array([IS_base]),
+                     "HA_base": np.array([ha_base]),
                      "pCS_base": np.array([pCS_base])}
         save_dict.update({k: np.array([v]) for k, v in fp.items()})
         np.savez(cache_file_A, **save_dict)
@@ -1196,6 +1268,15 @@ def main():
     # ══════════════════════════════════════════════════════════════════════════
     # RUN B — same total daily dose as QD (once daily)
     # ══════════════════════════════════════════════════════════════════════════
+    if SKIP_QD:
+        print("\n[RUN B] Skipped (SKIP_QD=True).")
+        total_elapsed = _time.perf_counter() - t_main_start
+        print(f"\n  Total wall-clock time: {total_elapsed:.1f} s "
+              f"({total_elapsed/60:.1f} min)")
+        print(f"    Cache A  : {os.path.join(OUTPUT_DIR, f'chronic_oral_cache_{tag_A}.npz')}")
+        print(f"    Figure A : {os.path.join(OUTPUT_DIR, f'chronic_oral_{tag_A}.png/.pdf')}")
+        return
+
     QD_DOSE       = DOSE_TOTAL_PER_DAY   # same total as Run A (e.g. 240 mg)
     QD_N_DOSES    = 1
     QD_TIMES_H    = [0.0]
@@ -1210,7 +1291,7 @@ def main():
     cache_file_B = os.path.join(
         OUTPUT_DIR,
         f"chronic_oral_cache_"
-        f"Ki{ki_str_b}_dose{QD_DOSE:.4g}mg_x{QD_N_DOSES}pd_{N_DAYS}days.npz"
+        f"Ki{ki_str_b}_dose{QD_DOSE:.4g}mg_x{QD_N_DOSES}pd_{N_DAYS}days_{MODE}_{RUN_DATE}.npz"
     )
 
     # Build a temporary fingerprint for QD to check cache validity
@@ -1222,6 +1303,7 @@ def main():
     _g = globals()
     _g["DOSE_PER_ADMIN"]  = QD_DOSE
     _g["N_DOSES_PER_DAY"] = QD_N_DOSES
+    _g["DOSE_TIMES_H"]    = QD_TIMES_H
     _g["DOSE_INTERVAL_H"] = TAU_H
     fp_B = _build_fingerprint(live_pk)
     cache_ok_B = False
@@ -1242,6 +1324,7 @@ def main():
     # Restore globals
     _g["DOSE_PER_ADMIN"]  = _orig_dose
     _g["N_DOSES_PER_DAY"] = _orig_n
+    _g["DOSE_TIMES_H"]    = [0.0, 8.0, 16.0] if _orig_n == 3 else [0.0]
     _g["DOSE_INTERVAL_H"] = TAU_H / _orig_n
 
     if cache_ok_B:
@@ -1257,7 +1340,7 @@ def main():
         print(f"  Running {N_DAYS} days × {QD_N_DOSES} dose/day "
               f"= {N_DAYS * QD_N_DOSES} total doses...")
         t0 = _time.perf_counter()
-        t_all_B, IS_all_B, pCS_all_B, drg_all_B = _run_simulation(
+        t_all_B, IS_all_B, HA_all_B, pCS_all_B, drg_all_B = _run_simulation(
             ic_ss, live_pk, QD_DOSE, QD_N_DOSES, QD_TIMES_H, oral_segs_B)
         elapsed_B = _time.perf_counter() - t0
         print(f"  ODE run complete in {elapsed_B:.1f} s "
@@ -1270,9 +1353,11 @@ def main():
         _g["DOSE_PER_ADMIN"]  = _orig_dose
         _g["N_DOSES_PER_DAY"] = _orig_n
         _g["DOSE_INTERVAL_H"] = TAU_H / _orig_n
-        save_dict_B = {"t_all": t_all_B, "IS_all": IS_all_B,
+        ha_base_B = float(ic_ss.get("C_tox2_cen", np.asarray(HA_all_B).reshape(-1)[0]))
+        save_dict_B = {"t_all": t_all_B, "IS_all": IS_all_B, "HA_all": HA_all_B,
                        "pCS_all": pCS_all_B, "drg_all": drg_all_B,
                        "IS_base": np.array([IS_base]),
+                       "HA_base": np.array([ha_base_B]),
                        "pCS_base": np.array([pCS_base])}
         save_dict_B.update({k: np.array([v]) for k, v in fp_B2.items()})
         np.savez(cache_file_B, **save_dict_B)

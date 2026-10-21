@@ -40,8 +40,8 @@ Literature targets (120 mg IV, 2 h infusion)
 ─────────────────────────────────────────────
               Healthy          CKD-5          Source
   Cmax (mg/L) 8–12             3–6            Brater 1983; Vaska 1995
-  t½   (h)    0.3–0.6          1.0–3.0        Andreasen 1983
-  CL_R (L/h)  6–10             1–2            Brater 1980; Chennavasin 1980
+  t½   (h)    1.2 ± 0.3        1.0–3.0        Andreasen 1983 (young 70±20 min)
+  CL_R (L/h)  4–7              1–2            Hammarlund 1984; Andreasen 1983
   AUC (mg·h/L)3–6              15–30          Vaska 1995
   Fe  (%)     60–80            10–25          Brater 1983
 ================================================================================
@@ -97,25 +97,31 @@ T_PK_H:       float = 24.0      # PK window: captures ≥4 half-lives for both m
 #   CKD-5   t½ ~5.8 h  →  5×t½ ≈ 29 h  (mostly captured; tail visible by 24 h)
 
 # Literature reference ranges [lo, hi, typical]
+# Healthy t½: Andreasen 1983 young men 70±20 min = 1.2±0.3 h
+#   Br J Clin Pharmacol 16(4):391–397.
+# Healthy CL_R 4–7 L/h: Hammarlund 1984 117 mL/min = 7.0 L/h
+#   (Eur J Clin Pharmacol 26(2):197–207); Andreasen 1983 67% of
+#   CLS 170 mL/min ≈ 6.8 L/h. Typical = mean of those two.
 _LIT = {
+    # Dose-independent targets (linear PK). Cmax/AUC depend on dose -> not validated.
     "healthy": {
-        "Cmax":   (8.0,  12.0,  10.0),
-        "CL_R":   (6.0,  10.0,   8.0),
-        "t_half": (1.02,  2.0,  1.5),
-        "AUC":    (3.0,   6.0,   4.5),
+        "CL_R":   (4.0, 7.0, 6.9),    # Benet 1979; Hammarlund 1984 7.0; Andreasen 1983 6.8 L/h
+        "t_half": (0.8, 1.5, 1.2),    # Andreasen 1983: 70 +/- 20 min
+        "Cmax":   (float("nan"),) * 3,
+        "AUC":    (float("nan"),) * 3,
     },
     "ckd5": {
-        "Cmax":   (3.0,   6.0,   4.5),
-        "CL_R":   (1.0,   2.0,   1.5),
-        "t_half": (3.8,   6.0,   5.0),
-        "AUC":   (15.0,  30.0,  22.0),
+        "CL_R":   (0.1, 0.5, 0.25),   # Rane 1978 (converted, 70 kg)
+        "t_half": (2.0, 4.0, 2.6),    # Beermann 1977 ~2.6 h; Rane 1978 ~3-fold vs healthy
+        "Cmax":   (float("nan"),) * 3,
+        "AUC":    (float("nan"),) * 3,
     },
 }
 
 # Expected CKD-5 values after ROUND 5 corrections in compound_parameters.py
 _CKD5_EXPECTED = {
     "k_elim_hinv":      0.12,    # h-1 (t½ = 5.8 h; Andreasen 1983)
-    "Vmax_baso_uptake": 675.0,   # mg/h (4500 × 0.15; Naud 2011)
+    "Vmax_baso_uptake": 225.0,   # 4500 x 0.05 -- value used for the paper (Table 2)
     "Vmax_api_secr":    750.0,   # mg/h (5000 × 0.15)
     "fu_p":             0.05,    # Takamura 1997
 }
@@ -220,7 +226,7 @@ def _apply_drug_params(mode: str) -> dict:
                 "CKD-5 drug parameters NOT applied correctly:\n"
                 + "\n".join(failures)
                 + "\n\nCheck compound_parameters.py ROUND 5 section and "
-                "that _CKD_SCALES['drug']['baso']=0.15, k_elim_hinv=0.12.")
+                "that _CKD_SCALES['drug']['baso']=0.05, k_elim_hinv=0.12.")
         print(f"\n  [✓ CKD-5 ASSERTIONS PASSED]")
         print(f"    k_elim = {C.drug['k_elim_hinv']:.3f} h-1  "
               f"(t½ = {0.693/C.drug['k_elim_hinv']:.2f} h)")
@@ -248,7 +254,7 @@ def _apply_drug_params(mode: str) -> dict:
 
 def _extract_curves(sol):
     t      = np.asarray(sol.t,               dtype=float)
-    Cc     = np.asarray(sol.y[IDX["C_ven"]], dtype=float)
+    Cc     = np.asarray(sol.y[IDX["C_ven"]], dtype=float) / float(C.drug.get("BP", 0.82))  # blood -> plasma
     Ae_raw = np.asarray(sol.y[IDX["Ae_drg"]],dtype=float)
     Ae     = Ae_raw - Ae_raw[0]
     return t, Cc, Ae
@@ -323,6 +329,9 @@ def _validate(metrics: dict, mode: str):
         ("t½   (h)",      metrics["t_half_h"],        lit["t_half"]),
         ("AUC  (mg·h/L)", metrics["AUC_mg_h_per_L"], lit["AUC"]),
     ]:
+        if np.isnan(lo):
+            print(f"  -  {name:<18} = {val:.3f}   (no sourced literature target)")
+            continue
         if np.isnan(val):
             print(f"  ?  {name:<18} = N/A    (target {typ:.1f}, range {lo}–{hi})")
         else:
@@ -391,12 +400,26 @@ def _run_mode(mode: str, dt: float = 0.1) -> dict:
 # SECTION 6 — Figure (4-panel)
 # ══════════════════════════════════════════════════════════════════════════════
 
-_COLORS = {"Healthy": "#3969AC", "CKD-5": "#C44E52"}
+# Greyscale (print): Healthy solid black; CKD-5 dashed mid-grey + hatch bars.
+_LINE = {
+    "Healthy": dict(color="#111111", ls="-",  lw=2.2),
+    "CKD-5":   dict(color="#666666", ls="--", lw=2.2),
+}
+_BAR = {
+    "Healthy": dict(facecolor="#4D4D4D", edgecolor="k", hatch=""),
+    "CKD-5":   dict(facecolor="#BDBDBD", edgecolor="k", hatch="//"),
+}
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Liberation Serif", "DejaVu Serif"],
+    "axes.unicode_minus": False,
+})
 
 
 def plot_furosemide_pk(pk_data: dict) -> plt.Figure:
     """
-    Four-panel figure:
+    Four-panel greyscale figure (same layout as the manuscript screenshot):
       A — plasma concentration, linear scale
       B — plasma concentration, semi-log (shows terminal slope)
       C — cumulative urinary excretion
@@ -412,41 +435,44 @@ def plot_furosemide_pk(pk_data: dict) -> plt.Figure:
     ax_ae  = fig.add_subplot(gs[1, 0])
     ax_bar = fig.add_subplot(gs[:, 2])
 
+    for ax in (ax_lin, ax_log, ax_ae, ax_bar):
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
     # Panels A & B
     for label, d in pk_data.items():
-        col = _COLORS[label]
-        ax_lin.plot(d["t"], d["C"], color=col, lw=2.2, label=label)
+        st = _LINE[label]
+        ax_lin.plot(d["t"], d["C"], label=label, **st)
         ax_log.semilogy(d["t"], np.clip(d["C"], 1e-6, None),
-                        color=col, lw=2.2, label=label)
+                        label=label, **st)
 
     for ax in (ax_lin, ax_log):
-        ax.axvline(2.0, color="grey", ls=":", lw=1.2, label="End infusion")
+        ax.axvline(2.0, color="0.55", ls=":", lw=1.2)
         ax.set_xlabel("Time (h)", fontsize=11)
-        ax.grid(True, alpha=0.3)
+        ax.grid(True, alpha=0.25, color="0.7")
 
     ax_lin.set_ylabel("Plasma concentration (mg/L)", fontsize=11)
     ax_log.set_ylabel("Plasma concentration (mg/L, log)", fontsize=11)
     ax_lin.text(0.03, 0.95, "A", transform=ax_lin.transAxes,
-                fontweight="bold", fontsize=13, va="top")
+                fontweight="bold", fontsize=14, va="top")
     ax_log.text(0.03, 0.95, "B", transform=ax_log.transAxes,
-                fontweight="bold", fontsize=13, va="top")
+                fontweight="bold", fontsize=14, va="top")
 
     # Panel C
     for label, d in pk_data.items():
-        ax_ae.plot(d["t"], d["Ae"], color=_COLORS[label], lw=2.2, label=label)
-    ax_ae.axvline(2.0, color="grey", ls=":", lw=1.2)
+        ax_ae.plot(d["t"], d["Ae"], label=label, **_LINE[label])
+    ax_ae.axvline(2.0, color="0.55", ls=":", lw=1.2)
     ax_ae.set_xlabel("Time (h)", fontsize=11)
     ax_ae.set_ylabel("Cumulative urinary excretion (mg)", fontsize=11)
-    ax_ae.grid(True, alpha=0.3)
+    ax_ae.grid(True, alpha=0.25, color="0.7")
     ax_ae.text(0.03, 0.95, "C", transform=ax_ae.transAxes,
-               fontweight="bold", fontsize=13, va="top")
+               fontweight="bold", fontsize=14, va="top")
 
     # Panel D
     metrics_cfg = [
         ("CL_R_L_per_h", "CL_R (L/h)", "CL_R"),
         ("t_half_h",     "t½ (h)",     "t_half"),
     ]
-    labels  = list(pk_data.keys())
     x       = np.arange(len(metrics_cfg))
     w       = 0.32
     offsets = (-w/2, w/2)
@@ -455,7 +481,7 @@ def plot_furosemide_pk(pk_data: dict) -> plt.Figure:
     for i, (label, d) in enumerate(pk_data.items()):
         vals = [d["metrics"].get(k, np.nan) for k, _, _ in metrics_cfg]
         bars = ax_bar.bar(x + offsets[i], vals, w,
-                          label=label, color=_COLORS[label], alpha=0.85)
+                          label=label, **_BAR[label])
         for bar, val in zip(bars, vals):
             if not np.isnan(val):
                 ax_bar.text(bar.get_x() + bar.get_width()/2,
@@ -474,14 +500,14 @@ def plot_furosemide_pk(pk_data: dict) -> plt.Figure:
     ax_bar.set_xticks(x)
     ax_bar.set_xticklabels([lbl for _, lbl, _ in metrics_cfg], fontsize=11)
     ax_bar.set_ylabel("Value", fontsize=11)
-    ax_bar.grid(True, axis="y", alpha=0.3)
+    ax_bar.grid(True, axis="y", alpha=0.25, color="0.7")
     ax_bar.text(0.03, 0.97, "D", transform=ax_bar.transAxes,
-                fontweight="bold", fontsize=13, va="top")
+                fontweight="bold", fontsize=14, va="top")
     ax_bar.set_title("PK metrics vs literature\n(error bars = target range)",
                      fontsize=10)
 
     handles, lbls = ax_lin.get_legend_handles_labels()
-    fig.legend(handles, lbls, loc="upper center", ncol=3, frameon=False,
+    fig.legend(handles, lbls, loc="upper center", ncol=2, frameon=False,
                bbox_to_anchor=(0.5, 1.00), fontsize=11)
     fig.suptitle("Furosemide PK: Healthy vs CKD-5  (120 mg IV, 2 h infusion)",
                  fontsize=13, fontweight="bold", y=1.02)
@@ -552,10 +578,13 @@ def main():
         data_c["label"]: {k: data_c[k] for k in ("t", "C", "Ae", "metrics")},
     }
     fig = plot_furosemide_pk(pk_data)
-    for ext in ("png", "pdf"):
-        path = os.path.join(out_dir, f"furosemide_pk_healthy_vs_ckd5.{ext}")
-        fig.savefig(path, dpi=300, bbox_inches="tight")
-        print(f"  Saved: {path}")
+    pub_dir = os.path.join(_THIS_DIR, "..", "publication_code", "Figures")
+    os.makedirs(pub_dir, exist_ok=True)
+    for dest in (out_dir, pub_dir):
+        for ext in ("png", "pdf"):
+            path = os.path.join(dest, f"furosemide_pk_healthy_vs_ckd5.{ext}")
+            fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.04)
+            print(f"  Saved: {path}")
     plt.close(fig)
 
 

@@ -13,6 +13,10 @@ known bug or limitation is documented rather than hidden, and the goal is
 that a new student or collaborator can clone this, run it, and understand
 *why* every parameter has the value it does.
 
+Manuscript / chronic-oral session memory (Table 1, caches, figure scripts,
+Windows pull): `.cursor/skills/pbpk-furosemide-paper/SKILL.md` and
+`docs/session_log_2026-09_chronic_oral.md`.
+
 ---
 
 ## What this model represents
@@ -102,6 +106,75 @@ python analysis/dose_response_tid_vs_qd.py
 
 Outputs (figures, CSVs, cached simulation data) appear in `results/`.
 
+### Chronic-oral CKD-5 caches (Figure 5 / dosing comparison)
+
+These `.npz` files are **gitignored**. They are not on GitHub. Each reader
+must generate them locally (or copy a complete cache from a co-author).
+
+**HA is required.** Figure 5 (five-panel) and
+`analysis/compare_dosing_regimens_grey_HA_ADDED.py` need `HA_all` (full
+hippuric-acid blood time course) plus `IS_all`, `pCS_all`, `drg_all`,
+`t_all`. A scalar `HA_base` is useful but can be taken as `HA_all[0]`.
+
+Two NPZ families exist. Do not mix them:
+
+| Prefix | Typical keys | Use for Fig 5? |
+|---|---|---|
+| `chronic_oral_cache_Ki0p35_dose*mg_x*pd_30days_ckd5*.npz` | `t_all`, `IS_all`, **`HA_all`**, `pCS_all`, `drg_all`, `IS_base`, `pCS_base` (and `HA_base` on new writes) | **Yes** |
+| `results_Ki0p35_*.npz` | `t_all`, `IS_all`, `pCS_all`, `drg_all` — **no `HA_all`** | **No.** Summary file for IS/pCS metrics only. Renaming it to `chronic_oral_cache_*` does **not** add HA. |
+
+Paper arms (CKD-5, 30 days, Ki = 0.35 mg/L):
+
+| Arm | File glob |
+|---|---|
+| TID 40 mg × 3 | `chronic_oral_cache_Ki0p35_dose40mg_x3pd_30days_ckd5*.npz` |
+| QD 240 mg × 1 | `chronic_oral_cache_Ki0p35_dose240mg_x1pd_30days_ckd5*.npz` |
+| TID 80 mg × 3 | `chronic_oral_cache_Ki0p35_dose80mg_x3pd_30days_ckd5*.npz` |
+
+Sanity: `IS_base` ≈ **19.7 mg/L blood** (range 8–80). If `IS_base` ≈ 0.5, the
+file is healthy/acute — discard it. Never `git clean -fdx` (that deletes
+`results/`).
+
+**Check whether your local files already contain HA** (Windows CMD, from the
+repo root):
+
+```bat
+cd /d C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
+pbpk_env\Scripts\python.exe analysis\inspect_chronic_npz.py
+```
+
+Look at the `HA_b` column and the notes. `NO HA_all` means that file cannot
+drive the HA panel. `HA_all n=…` with a large `n` (thousands of time points)
+means HA is present.
+
+**Create the three paper caches on your PC** (CKD-5 ODE, tens of minutes per
+arm; first run builds a no-drug warm-up as well):
+
+```bat
+cd /d C:\Users\p70091319\Desktop\Mywork\Project_PBPK_Model\PBPK_Furosemide_Uremic_Toxins_pythoncode
+pbpk_env\Scripts\python.exe analysis\regenerate_chronic_caches.py
+```
+
+That driver writes dated `chronic_oral_cache_Ki0p35_dose{40×3, 80×3, 240×1,
+and optional 240×3}_30days_ckd5_YYYYMMDD.npz` under `results/`, including
+`HA_all` and `HA_base`. Then:
+
+```bat
+pbpk_env\Scripts\python.exe analysis\inspect_chronic_npz.py
+pbpk_env\Scripts\python.exe figures\make_chronic_oral_five_panel.py
+```
+
+The five-panel script will reuse those caches if they pass the CKD-5 /
+`IS_base` guards, or re-simulate an arm if the cache is missing or stale.
+
+Linux / macOS (from the clone root, after `pip install -r requirements.txt`):
+
+```bash
+python analysis/regenerate_chronic_caches.py
+python analysis/inspect_chronic_npz.py
+python figures/make_chronic_oral_five_panel.py
+```
+
 ### A note on runtime
 
 CKD-5 toxins have long equilibration time constants (IS tau ≈ 51h in
@@ -175,7 +248,12 @@ lowering them gives you a fast smoke test.
 | File | Role |
 |---|---|
 | `make_three_way_comparison_figure.py` | Publication 4-panel figure: ODE vs theoretical-Analytical vs Clinical comparison, reads `.npz` results produced by `dose_response_tid_vs_qd.py` |
+| `make_bars_healthy_ckd_combined.py` | **Figure 3**: 2×2 Healthy (A/B) + CKD-5 (C/D) toxin bars vs literature; one 4-entry legend |
 | `heatmap_ki_vmax_from_cache.py` | Publication-styled Ki×Vmax heatmap (horizontal colorbar layout); imports `compute_heatmap()` directly from `analysis/heatmap_ki_vmax_sensitivity_ode.py` rather than duplicating the simulation logic — both scripts share one cache file |
+
+### `publication_code/` — paper-facing copy
+
+Same keepers as `src/`, `analysis/`, and `figures/`, plus `publication_code/Figures/` for manuscript includes such as `bars_healthy_ckd_combined.pdf`. See `publication_code/README.md`.
 
 ---
 

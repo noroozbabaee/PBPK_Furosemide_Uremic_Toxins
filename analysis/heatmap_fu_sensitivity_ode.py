@@ -56,8 +56,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from matplotlib.colors import Normalize
-import matplotlib.ticker as mticker
 
 # ── Path bootstrap ──────────────────────────────────────────────────────────
 # This script lives in analysis/. The core PBPK engine lives in ../src/.
@@ -207,8 +205,16 @@ def _run_one_cycle(ic: dict, day: int,
     t_off = day * TAU_H
     t_all = []; y_all = []
     ic_cur = copy.deepcopy(ic)
-    for k in ("C_ven", "C_peri", "Ae_drg", "C_bladder"):
-        if k in ic_cur: ic_cur[k] = 0.0
+    # Zero furosemide only on day 0. Later days must carry C_ven / C_peri
+    # across midnight (same rule as dose_response_tid_vs_qd.run_one_day_tid).
+    if day == 0:
+        for k in ("C_ven", "C_peri", "Ae_drg", "C_bladder"):
+            if k in ic_cur:
+                ic_cur[k] = 0.0
+    else:
+        for k in ("Ae_drg", "C_bladder"):
+            if k in ic_cur:
+                ic_cur[k] = 0.0
 
     # Absorption segments
     for (t0, t1, IR) in ORAL_SEGS:
@@ -374,154 +380,67 @@ else:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# FIGURE — 2×2 layout
+# FIGURE — flux-decomposition style (no contours, no grid, no H/V lines)
 # ═════════════════════════════════════════════════════════════════════════════
 plt.rcParams.update({
-    "font.family":       "sans-serif",
-    "font.size":         12,
-    "axes.linewidth":    1.0,
+    "font.family":       "serif",
+    "font.serif":        ["Times New Roman", "Liberation Serif", "Times"],
+    "mathtext.fontset":  "stix",
+    "pdf.fonttype":      42,
     "axes.spines.top":   False,
     "axes.spines.right": False,
+    "axes.grid":         False,
+    "axes.titlesize":    16,
+    "axes.labelsize":    12,
+    "xtick.labelsize":   12,
+    "ytick.labelsize":   12,
     "xtick.direction":   "out",
     "ytick.direction":   "out",
-    "xtick.major.size":  4,
-    "ytick.major.size":  4,
 })
 
-fig = plt.figure(figsize=(14, 11), dpi=300)
+fig = plt.figure(figsize=(12, 7.6), dpi=300)
 fig.patch.set_facecolor("white")
 gs = gridspec.GridSpec(
     2, 2, figure=fig,
-    hspace=0.38, wspace=0.32,
+    hspace=0.32, wspace=0.28,
     left=0.09, right=0.96,
-    top=0.91, bottom=0.10,
+    top=0.94, bottom=0.10,
 )
-
-# X/Y tick labels
-drug_labels = [f"{v:.2f}" for v in DRUG_FU_GRID]
-tox_labels  = [f"{v:.2f}×" for v in TOXIN_FU_MULT]
 
 PANELS = [
-    # (title, grid, cmap, ylabel_extra, clinical_val, unit)
-    ("A   IS plasma $C_{ss}$ — absolute",
-     IS_ss_grid,   "Blues",   "mg/L", None,  "mg/L"),
-    ("B   pCS plasma $C_{ss}$ — absolute",
-     pCS_ss_grid,  "Purples", "mg/L", None,  "mg/L"),
-    ("C   IS $\\Delta C_{ss}$ vs no-drug baseline",
-     IS_pct_grid,  "YlOrRd",  "%",    31.9,  "%"),
-    ("D   pCS $\\Delta C_{ss}$ vs no-drug baseline",
-     pCS_pct_grid, "YlOrRd",  "%",    29.3,  "%"),
+    ("A", "IS",  r"IS $\Delta \overline{C}$ vs no-drug (%)", IS_pct_grid),
+    ("B", "pCS", r"pCS $\Delta \overline{C}$ vs no-drug (%)", pCS_pct_grid),
+    ("C", "IS",  r"IS $C$ last cycle (mg/L blood)", IS_ss_grid),
+    ("D", "pCS", r"pCS $C$ last cycle (mg/L blood)", pCS_ss_grid),
 ]
 
-for idx, (title, grid, cmap, unit, clin_val, cbar_unit) in enumerate(PANELS):
-    ax  = fig.add_subplot(gs[idx // 2, idx % 2])
-    row, col = idx // 2, idx % 2
-
+for idx, (letter, toxin, ylabel, grid) in enumerate(PANELS):
+    ax = fig.add_subplot(gs[idx // 2, idx % 2])
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(False)
     vmin = float(np.nanmin(grid))
     vmax = float(np.nanmax(grid))
-    norm = Normalize(vmin=vmin, vmax=vmax)
-
-    # ── Heatmap ───────────────────────────────────────────────────────────
-    im = ax.imshow(
-        grid,
-        cmap=cmap, norm=norm,
-        aspect="auto", origin="lower",
-        interpolation="nearest",
+    if not np.isfinite(vmin):
+        vmin, vmax = 0.0, 1.0
+    cmap = "YlOrRd" if idx < 2 else ("Blues" if toxin == "IS" else "Purples")
+    im = ax.pcolormesh(
+        DRUG_FU_GRID, TOXIN_FU_MULT, grid,
+        cmap=cmap, shading="gouraud", rasterized=True,
     )
+    ax.set_xlim(DRUG_FU_GRID[0], DRUG_FU_GRID[-1])
+    ax.set_ylim(TOXIN_FU_MULT[0], TOXIN_FU_MULT[-1])
+    ax.set_xlabel(r"Furosemide $f_{u,p}$")
+    if idx % 2 == 0:
+        ax.set_ylabel("Toxin $f_{u,p}$ multiplier\n"
+                      r"($\times$ Deltombe CKD-5 base)")
+    ax.text(0.02, 0.95, letter, transform=ax.transAxes,
+            fontsize=16, fontweight="bold", va="top", ha="left")
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
+    cbar.set_label(ylabel if idx >= 2 else r"%", fontsize=12)
+    cbar.ax.grid(False)
 
-    # ── Clinical contour (panels C and D) ─────────────────────────────────
-    if clin_val is not None and vmin < clin_val < vmax:
-        # imshow uses pixel coordinates — use contourf on the grid directly
-        try:
-            cs = ax.contour(
-                np.arange(N_DRUG), np.arange(N_TOX), grid,
-                levels=[clin_val],
-                colors=["#1A1A8C"], linewidths=2.0, linestyles=["--"]
-            )
-            ax.clabel(cs, fmt=f"Clinical +{clin_val:.0f}%",
-                      fontsize=9, colors="#1A1A8C",
-                      inline=True, inline_spacing=4)
-        except Exception:
-            pass
-
-    # ── Isoconcentration / iso-percent contours ────────────────────────────
-    if unit == "%":
-        iso_levels = [l for l in [5, 10, 15, 20, 25, 30]
-                      if vmin < l < vmax]
-    else:
-        # absolute — pick sensible round numbers
-        step = max(1, round((vmax - vmin) / 5))
-        iso_levels = [l for l in range(
-            int(np.ceil(vmin)), int(np.floor(vmax))+1, step)
-            if vmin < l < vmax][:5]
-
-    if iso_levels:
-        try:
-            cs2 = ax.contour(
-                np.arange(N_DRUG), np.arange(N_TOX), grid,
-                levels=iso_levels,
-                colors=["#333333"], linewidths=0.7,
-                linestyles=[":"], alpha=0.7
-            )
-            ax.clabel(cs2, fmt=f"%.1f{cbar_unit}",
-                      fontsize=8, colors="#333333",
-                      inline=True, inline_spacing=3)
-        except Exception:
-            pass
-
-    # ── Current model star (drug_fu=0.05, toxin_mult=1.0) ─────────────────
-    # drug_fu=0.05 is index 1 in DRUG_FU_GRID [0.02,0.05,0.07,0.10,0.13]
-    # toxin_mult=1.0 is index 2 in TOXIN_FU_MULT [0.50,0.75,1.00,1.50,2.00]
-    star_x = np.where(DRUG_FU_GRID == 0.05)[0]
-    star_y = np.where(TOXIN_FU_MULT == 1.00)[0]
-    if len(star_x) and len(star_y):
-        ax.scatter(star_x[0], star_y[0],
-                   s=300, marker="*", color="white",
-                   edgecolors="black", linewidths=1.3,
-                   zorder=10, label="Current model")
-
-    # ── Colourbar ─────────────────────────────────────────────────────────
-    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
-    cbar.set_label(f"{cbar_unit}", fontsize=11)
-    cbar.ax.tick_params(labelsize=9)
-
-    # ── Axis ticks and labels ─────────────────────────────────────────────
-    ax.set_xticks(range(N_DRUG))
-    ax.set_xticklabels(drug_labels, rotation=45, ha="right", fontsize=9)
-    ax.set_yticks(range(N_TOX))
-    ax.set_yticklabels(tox_labels, fontsize=9)
-
-    ax.set_xlabel(r"Furosemide $f_{u,p}$", fontsize=12, labelpad=5)
-    if col == 0:
-        ax.set_ylabel(r"Toxin $f_{u,p}$ multiplier" "\n"
-                      r"($\times$ Deltombe 2015 CKD-5 base)",
-                      fontsize=11)
-
-    ax.set_title(title, fontsize=13, fontweight="bold", loc="left", pad=6)
-
-    if star_x.size and star_y.size:
-        ax.legend(fontsize=9, frameon=True, loc="upper left",
-                  framealpha=0.9, edgecolor="#cccccc")
-
-# ── Shared suptitle ────────────────────────────────────────────────────────
-fig.suptitle(
-    "ODE-based sensitivity: furosemide $f_{u,p}$ × toxin $f_{u,p}$ "
-    "→ uremic toxin plasma concentration\n"
-    "Full 30-day PBPK simulation at each grid point  |  "
-    "CKD-5  |  Furosemide 240 mg/day oral  |  "
-    "$K_i = 0.35$ mg/L",
-    fontsize=11, fontweight="bold", y=0.995,
-)
-
-# ── Footer ─────────────────────────────────────────────────────────────────
-fig.text(
-    0.5, 0.01,
-    f"Grid: {N_DRUG}×{N_TOX} ODE simulations  |  "
-    f"Each point: {SS_WARMUP_H:.0f}h warm-up + {N_DAYS}×{TAU_H:.0f}h dosing  |  "
-    r"$\bigstar$ = current model (CKD-5 mild: $f_{u,p}^{furo}=0.05$, toxin mult=1.0)  |  "
-    "Blue dashed = Costes-Albrespic 2025 clinical signal",
-    ha="center", fontsize=8, color="#555555", style="italic",
-)
+fig.tight_layout(rect=[0, 0.02, 1, 1])
 
 # ── Save ───────────────────────────────────────────────────────────────────
 for ext in ("png", "pdf"):

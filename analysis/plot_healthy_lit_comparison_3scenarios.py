@@ -265,6 +265,18 @@ def _dedupe_legend(
     return list(uniq.values()), list(uniq.keys())
 
 
+def _legend_label(name: str) -> str:
+    """Drop Healthy/CKD from legend text; row placement already shows condition."""
+    s = str(name).strip()
+    for prefix in ("Healthy ", "CKD-5 ", "CKD "):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+            break
+    if s.lower().startswith("literature"):
+        return "Literature"
+    return s
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 3 — Generic figure builders
 # ══════════════════════════════════════════════════════════════════════════════
@@ -363,6 +375,11 @@ def create_figure_bars_generic(
     lit_clear:       Dict[str, Dict[str, Any]],
     legend_fontsize: int = 15,
     legend_bbox:     Tuple[float, float] = (0.5, -0.07),
+    fig=None,
+    axes=None,
+    show_legend: bool = True,
+    panel_letters: Tuple[str, str] = ("A", "B"),
+    apply_tight_layout: bool = True,
 ) -> plt.Figure:
     """
     Build the 1×2 bar figure (fig_bars).
@@ -370,10 +387,19 @@ def create_figure_bars_generic(
     Panel A: final plasma concentration [mg/L] vs literature
     Panel B: renal clearance CLR=Ae/AUC [L/h] vs literature
 
-    Literature values are shown as error bars (mean ± range) at x_scenario_0
-    position so they do not overlap with the bars.
+    Literature values are shown as error bars (mean ± range) on the black
+    With Furosemide (interaction) bars, not on No Interaction.
+
+    Legend entries are condition-free (No Furosemide / With Furosemide /
+    With Furosemide (No Interaction) / Literature). Healthy vs CKD-5 is
+    left to row labels on a combined figure.
     """
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5), sharey=False)
+    if axes is None:
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5), sharey=False)
+    else:
+        axL, axR = axes
+        if fig is None:
+            fig = axL.figure
 
     x       = np.arange(len(toxins))
     width   = 0.22
@@ -394,7 +420,7 @@ def create_figure_bars_generic(
     for i, scen in enumerate(scenario_names):
         axL.bar(
             x + offsets[i], finals[scen], width,
-            label=scen,
+            label=_legend_label(scen),
             color=colors.get(scen, "#777777"),
             alpha=0.85, edgecolor="black", linewidth=0.5,
         )
@@ -403,10 +429,10 @@ def create_figure_bars_generic(
     lit_lo   = [lit_conc[t]["value"] - lit_conc[t]["range"][0] for t in toxins]
     lit_hi   = [lit_conc[t]["range"][1] - lit_conc[t]["value"] for t in toxins]
     axL.errorbar(
-        x, lit_vals, yerr=[lit_lo, lit_hi],
+        x + offsets[2], lit_vals, yerr=[lit_lo, lit_hi],
         fmt="D", color="black", markerfacecolor="black",
         markersize=6, capsize=5, capthick=2, elinewidth=2,
-        label="Literature Healthy", zorder=5,
+        label="Literature", zorder=5,
     )
 
     axL.set_xlabel("Toxins",                              fontsize=16)
@@ -417,7 +443,7 @@ def create_figure_bars_generic(
     axL.grid(True, alpha=0.3, axis="y")
     axL.spines["top"].set_visible(False)
     axL.spines["right"].set_visible(False)
-    axL.text(0.02, 0.95, "A", transform=axL.transAxes,
+    axL.text(0.02, 0.95, panel_letters[0], transform=axL.transAxes,
              fontsize=16, fontweight="bold", va="top")
 
     # ── Panel B: renal clearances ─────────────────────────────────────────────
@@ -437,7 +463,7 @@ def create_figure_bars_generic(
     for i, scen in enumerate(scenario_names):
         axR.bar(
             x + offsets[i], clears[scen], width,
-            label=scen,
+            label=_legend_label(scen),
             color=colors.get(scen, "#777777"),
             alpha=0.85, edgecolor="black", linewidth=0.5,
         )
@@ -446,10 +472,10 @@ def create_figure_bars_generic(
     litc_lo   = [lit_clear[t]["value"] - lit_clear[t]["range"][0] for t in toxins]
     litc_hi   = [lit_clear[t]["range"][1] - lit_clear[t]["value"] for t in toxins]
     axR.errorbar(
-        x, litc_vals, yerr=[litc_lo, litc_hi],
+        x + offsets[2], litc_vals, yerr=[litc_lo, litc_hi],
         fmt="D", color="black", markerfacecolor="black",
         markersize=6, capsize=5, capthick=2, elinewidth=2,
-        label="Literature Healthy", zorder=5,
+        label="Literature", zorder=5,
     )
 
     axR.set_xlabel("Toxins",          fontsize=16)
@@ -460,7 +486,7 @@ def create_figure_bars_generic(
     axR.grid(True, alpha=0.3, axis="y")
     axR.spines["top"].set_visible(False)
     axR.spines["right"].set_visible(False)
-    axR.text(0.02, 0.95, "B", transform=axR.transAxes,
+    axR.text(0.02, 0.95, panel_letters[1], transform=axR.transAxes,
              fontsize=16, fontweight="bold", va="top")
 
     # ── Shared legend below both panels ───────────────────────────────────────
@@ -469,21 +495,23 @@ def create_figure_bars_generic(
         if leg:
             leg.remove()
 
-    h1, l1 = axL.get_legend_handles_labels()
-    h2, l2 = axR.get_legend_handles_labels()
-    handles, labels = _dedupe_legend(h1 + h2, l1 + l2)
+    if show_legend:
+        h1, l1 = axL.get_legend_handles_labels()
+        h2, l2 = axR.get_legend_handles_labels()
+        handles, labels = _dedupe_legend(h1 + h2, l1 + l2)
 
-    fig.legend(
-        handles, labels,
-        loc="lower center",
-        ncol=4,
-        frameon=False,
-        fontsize=legend_fontsize,
-        bbox_to_anchor=legend_bbox,
-        columnspacing=2.3,
-        handlelength=2.4,
-    )
-    fig.tight_layout(rect=[0, 0, 1, 0.93])
+        fig.legend(
+            handles, labels,
+            loc="lower center",
+            ncol=4,
+            frameon=False,
+            fontsize=legend_fontsize,
+            bbox_to_anchor=legend_bbox,
+            columnspacing=2.3,
+            handlelength=2.4,
+        )
+    if apply_tight_layout:
+        fig.tight_layout(rect=[0, 0, 1, 0.93])
     return fig
 
 
@@ -527,6 +555,7 @@ def create_figure_healthy_timecourses(solutions: Mapping[str, Any]) -> plt.Figur
 def create_figure_healthy_bars(
     solutions: Mapping[str, Any],
     window: Tuple[float, float] = (0.0, 12.0),
+    **bar_kwargs,
 ) -> plt.Figure:
     """Build fig_bars for the healthy three-scenario comparison."""
     scenario_names = [
@@ -572,6 +601,7 @@ def create_figure_healthy_bars(
         lit_clear=lit_clear,
         legend_fontsize=15,
         legend_bbox=(0.5, -0.07),
+        **bar_kwargs,
     )
 
 

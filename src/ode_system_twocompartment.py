@@ -158,6 +158,9 @@ import compounds as C
 # OAT3 toggle wrapper for drug basolateral uptake
 # ══════════════════════════════════════════════════════════════════════════════
 
+_FIX6_WARNED = False
+
+
 def _drug_baso_flux(drug: dict, Cu_drg_v: float, seg: str, EPS: float) -> float:
     if not hasattr(_drug_baso_flux, "_printed_path"):
         print(f"[_drug_baso_flux] use_oat3={drug.get('use_oat3', 'KEY MISSING')}, "
@@ -180,11 +183,12 @@ def _drug_baso_flux(drug: dict, Cu_drg_v: float, seg: str, EPS: float) -> float:
     else:
         Vmax_total = float(drug.get("Vmax_baso_uptake", 0.0))
         Vmax_OAT1 = Vmax_total * (1.5 / 2.5)
-        if not getattr(_drug_baso_flux, "_fix6_warned", False):
+        global _FIX6_WARNED
+        if not _FIX6_WARNED:
             print(f"\n[FIX #6 WARNING] drug['Vmax_OAT1'] not set.\n"
                   f"  Deriving from Vmax_baso_uptake={Vmax_total:.4e} × 0.60 "
                   f"= {Vmax_OAT1:.4e} mg/h.")
-            _drug_baso_flux._fix6_warned = True
+            _FIX6_WARNED = True
     return Vmax_OAT1 * Cu_drg_v / (Km_OAT1 + Cu_drg_v + EPS)
 
 
@@ -721,8 +725,6 @@ def kidney_rhs(t: float, y, *, phys: dict, FLOWS_L_HR: list):
         kidney_rhs._tissue_dist = None
         kidney_rhs._prox_debug_fired = False
         kidney_rhs._flow_debug_done = False
-        _drug_baso_flux._printed_path = False
-        _drug_baso_flux._fix6_warned = False
 
 
     # ── Step 3: Build state dict S and zeroed derivative dict dx ─────────────
