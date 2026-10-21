@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it using the metadata below, and cite the clinical study it is calibrated against (see preferred-citation)."
+
 type: software
 title: "Kidney PBPK Model — Furosemide & Protein-Bound Uremic Toxins"
 abstract: >-
@@ -10,7 +10,7 @@ abstract: >-
   142-state distributed tubular ODE system, parameter sensitivity analyses,
   and validation against published literature and clinical data.
 authors:
-  - given-names: Leyla
+  - given-names: Dr. Leyla Noroozbabaee
     affiliation: "MERLN Institute / cBITE / MaCSBio, Maastricht University"
 keywords:
   - PBPK
