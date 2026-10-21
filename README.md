@@ -233,19 +233,7 @@ items as of this repository's last update:
 
 ---
 
-## Citation
 
-If you use this model in your own work, please cite the clinical study
-this work is calibrated against:
-
-> Costes-Albrespic M, Alencar de Pinho N, Larabi IA, et al. Furosemide
-> and Serum Protein-Bound Uremic Toxin Concentrations in Patients With
-> CKD. *Kidney Int Rep.* 2025;10:2165–2177.
-
-See `CITATION.cff` for machine-readable citation metadata for this
-repository itself.
-
----
 
 ## License
 
